@@ -1,0 +1,46 @@
+# PSX AI Daily Portfolio Report (V2.0)
+#
+# Runs every day at 8:00 AM Pakistan Standard Time (PKT = UTC+5, no DST).
+# GitHub Actions cron uses UTC: 8:00 AM PKT = 3:00 AM UTC -> "0 3 * * *"
+#
+# Required GitHub Secrets:
+#   SENDER_EMAIL      - Gmail address used to send the report
+#   SENDER_PASSWORD   - Gmail App Password (not your regular password)
+#   RECEIVER_EMAIL    - Email address that receives the daily report
+#   GEMINI_API_KEY    - Google AI Studio API key for Gemini
+#
+# Optional GitHub Secrets:
+#   AI_MODEL_NAME     - Gemini model (defaults to gemini-1.5-flash in code)
+#   PORTFOLIO         - SYMBOL:BUY_PRICE pairs (defaults to built-in list in code)
+
+name: PSX Daily Report
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily report
+        run: python main.py
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
+          PORTFOLIO: ${{ secrets.PORTFOLIO }}
