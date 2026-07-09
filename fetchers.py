@@ -2,10 +2,12 @@
 Data fetchers for PSX portfolio technicals, news, and corporate events.
 """
 
+import json
 import re
 import sys
 import time
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
 
@@ -19,8 +21,14 @@ PAKISTAN_NEWS_URL = (
     "q=Pakistan+Stock+Exchange+OR+State+Bank+Pakistan+Economy"
     "&hl=en-US&gl=US&ceid=US:en"
 )
+GLOBAL_FINANCE_NEWS_URL = (
+    "https://news.google.com/rss/search?"
+    "q=global+markets+OR+Federal+Reserve+OR+oil+prices"
+    "&hl=en-US&gl=US&ceid=US:en"
+)
 PSX_PAYOUTS_URL = "https://dps.psx.com.pk/payouts"
 PSX_ANNOUNCEMENTS_URL = "https://dps.psx.com.pk/announcements/companies"
+PSX_SYMBOLS_URL = "https://dps.psx.com.pk/symbols"
 
 HTTP_HEADERS = {
     "User-Agent": (
@@ -77,14 +85,135 @@ MONTHS = {
 class Holding(TypedDict):
     buy_price: float
     quantity: int
+    sector: str
+    buy_date: date | None
+
+
+class ClientProfile(TypedDict):
+    client_name: str
+    email: str
+    telegram_chat_id: str
+    portfolio: str
+
+
+REQUIRED_PROFILE_KEYS = ("client_name", "email", "telegram_chat_id", "portfolio")
+
+
+def load_profiles(path: str = "profiles.json") -> list[ClientProfile]:
+    """Load and validate client profiles from profiles.json."""
+    profile_path = Path(path)
+    if not profile_path.exists():
+        raise FileNotFoundError(f"Profiles file not found: {profile_path}")
+
+    with profile_path.open(encoding="utf-8") as handle:
+        data = json.load(handle)
+
+    raw_profiles = data.get("profiles")
+    if not isinstance(raw_profiles, list) or not raw_profiles:
+        raise ValueError("profiles.json must contain a non-empty 'profiles' array.")
+
+    valid_profiles: list[ClientProfile] = []
+    for index, entry in enumerate(raw_profiles, start=1):
+        if not isinstance(entry, dict):
+            print(f"Skipping profile #{index}: not an object.", file=sys.stderr)
+            continue
+
+        missing = [key for key in REQUIRED_PROFILE_KEYS if not str(entry.get(key, "")).strip()]
+        if missing:
+            print(
+                f"Skipping profile #{index}: missing fields {', '.join(missing)}.",
+                file=sys.stderr,
+            )
+            continue
+
+        portfolio = parse_portfolio(str(entry["portfolio"]).strip())
+        if not portfolio:
+            print(
+                f"Skipping profile #{index} ({entry.get('client_name', 'unknown')}): "
+                "portfolio has no valid holdings.",
+                file=sys.stderr,
+            )
+            continue
+
+        valid_profiles.append(
+            {
+                "client_name": str(entry["client_name"]).strip(),
+                "email": str(entry["email"]).strip(),
+                "telegram_chat_id": str(entry["telegram_chat_id"]).strip(),
+                "portfolio": str(entry["portfolio"]).strip(),
+            }
+        )
+
+    if not valid_profiles:
+        raise ValueError("No valid client profiles found in profiles.json.")
+
+    return valid_profiles
+
+
+def collect_unique_symbols(profiles: list[ClientProfile]) -> set[str]:
+    """Return the union of all stock symbols across every client profile."""
+    symbols: set[str] = set()
+    for profile in profiles:
+        portfolio = parse_portfolio(profile["portfolio"])
+        symbols.update(portfolio.keys())
+    return symbols
+
+
+def _parse_buy_date(raw: str) -> date | None:
+    """Parse ISO buy date (YYYY-MM-DD) from portfolio string."""
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        print(f"Invalid buy date (use YYYY-MM-DD): {raw}", file=sys.stderr)
+        return None
+
+
+def _compute_cgt_status(buy_date: date | None) -> tuple[int | None, str]:
+    """Return holding days and CGT status from buy date."""
+    if buy_date is None:
+        return None, "N/A"
+    holding_days = (date.today() - buy_date).days
+    if holding_days < 365:
+        return holding_days, "Short-Term (<1 Yr)"
+    return holding_days, "Long-Term (>1 Yr)"
+
+
+def shares_to_portfolio(shares: list[dict[str, Any]]) -> dict[str, Holding]:
+    """Convert API share dicts to internal Holding map."""
+    portfolio: dict[str, Holding] = {}
+    for entry in shares:
+        symbol = str(entry.get("symbol", "")).strip().upper()
+        if not symbol:
+            continue
+        try:
+            buy_price = float(entry["buy_price"])
+            quantity = int(entry["quantity"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if buy_price <= 0 or quantity <= 0:
+            continue
+        sector = str(entry.get("sector", "Unknown")).strip() or "Unknown"
+        buy_date_raw = entry.get("buy_date")
+        buy_date = _parse_buy_date(str(buy_date_raw)) if buy_date_raw else None
+        portfolio[symbol] = {
+            "buy_price": buy_price,
+            "quantity": quantity,
+            "sector": sector,
+            "buy_date": buy_date,
+        }
+    return portfolio
 
 
 def parse_portfolio(raw: str) -> dict[str, Holding]:
     """
-    Parse PORTFOLIO env string into {symbol: {buy_price, quantity}}.
+    Parse PORTFOLIO env string into {symbol: Holding}.
 
-    Format: SYMBOL:BUY_PRICE:QUANTITY (e.g. HUBC:230.00:1000)
-    Legacy SYMBOL:BUY_PRICE entries default quantity to 1.
+    Format: SYMBOL:BUY_PRICE:QUANTITY:SECTOR:BUY_DATE
+    Legacy 2-part (SYMBOL:BUY_PRICE) or 3-part entries default sector to
+    Unknown and buy_date to None.
     """
     portfolio: dict[str, Holding] = {}
     for entry in raw.split(","):
@@ -94,6 +223,12 @@ def parse_portfolio(raw: str) -> dict[str, Holding]:
         parts = entry.split(":")
         if len(parts) < 2:
             print(f"Skipping malformed portfolio entry: {entry}", file=sys.stderr)
+            continue
+        if len(parts) == 4:
+            print(
+                f"Skipping malformed portfolio entry (expected 5 parts): {entry}",
+                file=sys.stderr,
+            )
             continue
 
         symbol = parts[0].strip().upper()
@@ -107,6 +242,9 @@ def parse_portfolio(raw: str) -> dict[str, Holding]:
             continue
 
         quantity = 1
+        sector = "Unknown"
+        buy_date: date | None = None
+
         if len(parts) >= 3:
             try:
                 quantity = int(float(parts[2].strip()))
@@ -122,11 +260,25 @@ def parse_portfolio(raw: str) -> dict[str, Holding]:
                 file=sys.stderr,
             )
 
+        if len(parts) >= 5:
+            sector = parts[3].strip().replace("_", " ") or "Unknown"
+            buy_date = _parse_buy_date(parts[4].strip())
+        elif len(parts) == 3:
+            print(
+                f"No sector/buy_date for {symbol}; CGT tracking unavailable.",
+                file=sys.stderr,
+            )
+
         if quantity <= 0:
             print(f"Skipping {symbol}: quantity must be positive.", file=sys.stderr)
             continue
 
-        portfolio[symbol] = {"buy_price": buy_price, "quantity": quantity}
+        portfolio[symbol] = {
+            "buy_price": buy_price,
+            "quantity": quantity,
+            "sector": sector,
+            "buy_date": buy_date,
+        }
     return portfolio
 
 
@@ -196,17 +348,17 @@ def _build_technical_row(
     return row, text_line
 
 
-def fetch_technical_data(
-    portfolio: dict[str, Holding],
-) -> tuple[list[dict[str, Any]], str]:
+def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
     """
-    Fetch TradingView technical data for each portfolio symbol.
+    Fetch TradingView market indicators once for a set of symbols.
 
-    Computes exact PKR P/L as (current - buy_price) * quantity.
-    Returns structured rows and a plain-text block for the AI prompt.
+    Returns per-symbol market data only (no client buy price, qty, or P/L).
     """
-    symbols = list(portfolio.keys())
-    tv_symbols = [f"PSX:{ticker}" for ticker in symbols]
+    if not symbols:
+        return {}
+
+    symbol_list = sorted(symbols)
+    tv_symbols = [f"PSX:{ticker}" for ticker in symbol_list]
     results: dict[str, Any] | None = None
 
     for attempt in range(2):
@@ -222,65 +374,488 @@ def fetch_technical_data(
             if attempt == 0:
                 time.sleep(0.5)
 
-    rows: list[dict[str, Any]] = []
-    text_lines: list[str] = []
+    indicators: dict[str, dict[str, Any]] = {}
 
     if not results:
-        for symbol, holding in portfolio.items():
-            row, text_line = _build_technical_row(
-                symbol,
-                holding["buy_price"],
-                holding["quantity"],
-                None,
-                None,
-                None,
-                None,
-                None,
-                error="Batch fetch failed",
-            )
-            rows.append(row)
-            text_lines.append(text_line)
-        return rows, "\n".join(text_lines)
+        for symbol in symbol_list:
+            indicators[symbol] = {
+                "current_price": None,
+                "rsi": None,
+                "volume": None,
+                "r1": None,
+                "s1": None,
+                "error": "Batch fetch failed",
+            }
+        return indicators
 
-    for symbol, holding in portfolio.items():
-        buy_price = holding["buy_price"]
-        quantity = holding["quantity"]
+    for symbol in symbol_list:
         symbol_key = f"PSX:{symbol}"
         try:
             analysis = results.get(symbol_key)
             if analysis is None:
                 raise KeyError(f"No data returned for {symbol_key}")
 
-            indicators = analysis.indicators or {}
-            row, text_line = _build_technical_row(
-                symbol,
-                buy_price,
-                quantity,
-                indicators.get("close"),
-                indicators.get("RSI"),
-                indicators.get("volume"),
-                indicators.get("Pivot.M.Classic.R1"),
-                indicators.get("Pivot.M.Classic.S1"),
-            )
-            rows.append(row)
-            text_lines.append(text_line)
+            data = analysis.indicators or {}
+            indicators[symbol] = {
+                "current_price": data.get("close"),
+                "rsi": data.get("RSI"),
+                "volume": data.get("volume"),
+                "r1": data.get("Pivot.M.Classic.R1"),
+                "s1": data.get("Pivot.M.Classic.S1"),
+                "error": None,
+            }
         except Exception as exc:
             print(f"Error processing {symbol}: {exc}", file=sys.stderr)
-            row, text_line = _build_technical_row(
-                symbol,
-                buy_price,
-                quantity,
-                None,
-                None,
-                None,
-                None,
-                None,
-                error=str(exc),
+            indicators[symbol] = {
+                "current_price": None,
+                "rsi": None,
+                "volume": None,
+                "r1": None,
+                "s1": None,
+                "error": str(exc),
+            }
+
+    return indicators
+
+
+_PSX_SYMBOLS_CACHE: list[dict[str, str]] | None = None
+_PSX_SYMBOLS_CACHE_AT: float = 0.0
+_PSX_SYMBOLS_CACHE_TTL = 6 * 60 * 60  # 6 hours
+
+
+def _load_psx_symbols() -> list[dict[str, str]]:
+    """Load and cache PSX equity symbols from the official symbols page."""
+    global _PSX_SYMBOLS_CACHE, _PSX_SYMBOLS_CACHE_AT
+
+    now = time.time()
+    if _PSX_SYMBOLS_CACHE is not None and now - _PSX_SYMBOLS_CACHE_AT < _PSX_SYMBOLS_CACHE_TTL:
+        return _PSX_SYMBOLS_CACHE
+
+    html = _fetch_html(PSX_SYMBOLS_URL)
+    if not html:
+        return _PSX_SYMBOLS_CACHE or []
+
+    try:
+        raw_items = json.loads(html.strip())
+    except json.JSONDecodeError as exc:
+        print(f"Failed to parse PSX symbols JSON: {exc}", file=sys.stderr)
+        return _PSX_SYMBOLS_CACHE or []
+
+    symbols: list[dict[str, str]] = []
+    for item in raw_items:
+        if item.get("isDebt") or item.get("isETF"):
+            continue
+        symbol = str(item.get("symbol", "")).strip().upper()
+        name = str(item.get("name", "")).strip()
+        sector = str(item.get("sectorName", "")).strip()
+        if not symbol:
+            continue
+        symbols.append({"symbol": symbol, "name": name, "sector": sector})
+
+    symbols.sort(key=lambda entry: entry["symbol"])
+    _PSX_SYMBOLS_CACHE = symbols
+    _PSX_SYMBOLS_CACHE_AT = now
+    return symbols
+
+
+def search_psx_symbols(query: str, limit: int = 8) -> list[dict[str, str]]:
+    """Return PSX symbols matching a ticker or company name prefix."""
+    normalized = query.strip().upper()
+    if len(normalized) < 1:
+        return []
+
+    all_symbols = _load_psx_symbols()
+    if not all_symbols:
+        return []
+
+    exact: list[dict[str, str]] = []
+    prefix: list[dict[str, str]] = []
+    contains: list[dict[str, str]] = []
+    query_lower = query.strip().lower()
+
+    for entry in all_symbols:
+        symbol = entry["symbol"]
+        name = entry["name"]
+        if symbol == normalized:
+            exact.append(entry)
+            continue
+        if symbol.startswith(normalized):
+            prefix.append(entry)
+            continue
+        if query_lower and query_lower in name.lower():
+            contains.append(entry)
+
+    ranked = exact + prefix + contains
+    seen: set[str] = set()
+    results: list[dict[str, str]] = []
+    for entry in ranked:
+        if entry["symbol"] in seen:
+            continue
+        seen.add(entry["symbol"])
+        results.append(entry)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def fetch_kse100_index() -> dict[str, Any]:
+    """Fetch KSE-100 index value and sparkline data from TradingView."""
+    index_symbols = ["PSX:KSE100", "KSE:KSE100", "PSX:KSE100INDEX"]
+    value: float | None = None
+    change: float | None = None
+    change_pct: float | None = None
+    sparkline: list[float] = []
+
+    for tv_symbol in index_symbols:
+        try:
+            results = get_multiple_analysis(
+                screener="pakistan",
+                interval=Interval.INTERVAL_1_DAY,
+                symbols=[tv_symbol],
             )
-            rows.append(row)
-            text_lines.append(text_line)
+            analysis = results.get(tv_symbol) if results else None
+            if analysis is None:
+                continue
+
+            data = analysis.indicators or {}
+            close = data.get("close")
+            if close is None:
+                continue
+
+            value = float(close)
+            change = data.get("change")
+            change_pct = data.get("change_percent") or data.get("change")
+            if change is not None:
+                change = float(change)
+            if change_pct is not None:
+                change_pct = float(change_pct)
+
+            open_price = data.get("open") or close
+            high = data.get("high") or close
+            low = data.get("low") or close
+            sparkline = [
+                float(open_price),
+                float(low),
+                float((float(high) + float(low)) / 2),
+                float(high),
+                float(close),
+            ]
+            break
+        except Exception as exc:
+            print(f"KSE-100 fetch via {tv_symbol} failed: {exc}", file=sys.stderr)
+
+    if value is None:
+        html = _fetch_html("https://dps.psx.com.pk/")
+        if html:
+            text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+            match = re.search(r"KSE\s*100[^\d]*([\d,]+\.?\d*)", text, re.IGNORECASE)
+            if match:
+                value = float(match.group(1).replace(",", ""))
+                sparkline = [value * 0.99, value * 0.995, value * 1.002, value * 0.998, value]
+
+    if value is None:
+        return {
+            "name": "KSE-100 Index",
+            "value": 0.0,
+            "change": 0.0,
+            "change_pct": 0.0,
+            "sparkline": [0, 0, 0, 0, 0],
+        }
+
+    if change is None and sparkline and len(sparkline) >= 2:
+        change = sparkline[-1] - sparkline[0]
+    if change_pct is None and sparkline and sparkline[0]:
+        change_pct = (change or 0) / sparkline[0] * 100
+
+    return {
+        "name": "KSE-100 Index",
+        "value": round(value, 2),
+        "change": round(change or 0, 2),
+        "change_pct": round(change_pct or 0, 2),
+        "sparkline": [round(v, 2) for v in sparkline] if sparkline else [value],
+    }
+
+
+def fetch_technical_data(
+    portfolio: dict[str, Holding],
+) -> tuple[list[dict[str, Any]], str]:
+    """
+    Fetch TradingView technical data for each portfolio symbol.
+
+    Computes exact PKR P/L as (current - buy_price) * quantity.
+    Returns structured rows and a plain-text block for the AI prompt.
+    """
+    indicators = fetch_market_indicators(set(portfolio.keys()))
+    rows: list[dict[str, Any]] = []
+    text_lines: list[str] = []
+
+    for symbol, holding in portfolio.items():
+        market = indicators.get(symbol, {})
+        row, text_line = _build_technical_row(
+            symbol,
+            holding["buy_price"],
+            holding["quantity"],
+            market.get("current_price"),
+            market.get("rsi"),
+            market.get("volume"),
+            market.get("r1"),
+            market.get("s1"),
+            error=market.get("error"),
+        )
+        rows.append(row)
+        text_lines.append(text_line)
 
     return rows, "\n".join(text_lines)
+
+
+def build_market_data_cache(symbols: set[str]) -> dict[str, Any]:
+    """Fetch technicals, fundamentals, and PSX events once for all symbols."""
+    print(f"Building market data cache for {len(symbols)} unique symbol(s)...")
+    return {
+        "technicals": fetch_market_indicators(symbols),
+        "fundamentals": fetch_fundamentals(symbols),
+        "psx_events": fetch_psx_corporate_events(symbols),
+    }
+
+
+def build_client_report_data(
+    portfolio: dict[str, Holding],
+    cache: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str, dict[str, Any], dict[str, Any]]:
+    """
+    Assemble client-specific enriched rows, prompt text, summary, and PSX events.
+
+    Uses cached market data merged with the client's holdings (buy price, qty, sector).
+    """
+    technicals = cache.get("technicals", {})
+    fundamentals = cache.get("fundamentals", {})
+    psx_events_cache = cache.get("psx_events", {})
+
+    rows: list[dict[str, Any]] = []
+    for symbol, holding in portfolio.items():
+        market = technicals.get(symbol, {})
+        row, _ = _build_technical_row(
+            symbol,
+            holding["buy_price"],
+            holding["quantity"],
+            market.get("current_price"),
+            market.get("rsi"),
+            market.get("volume"),
+            market.get("r1"),
+            market.get("s1"),
+            error=market.get("error"),
+        )
+        rows.append(row)
+
+    enriched_rows, technical_text = enrich_portfolio_rows(
+        rows, portfolio, fundamentals
+    )
+    portfolio_summary = compute_portfolio_summary(enriched_rows)
+
+    client_symbols = set(portfolio.keys())
+    portfolio_events = build_portfolio_events_map(
+        client_symbols,
+        psx_events_cache.get("payouts", []),
+        psx_events_cache.get("board_meetings", []),
+    )
+    client_psx_events = {
+        "payouts": psx_events_cache.get("payouts", []),
+        "board_meetings": psx_events_cache.get("board_meetings", []),
+        "payouts_text": psx_events_cache.get(
+            "payouts_text", "No payout data available."
+        ),
+        "board_meetings_text": psx_events_cache.get(
+            "board_meetings_text", "No board meeting data available."
+        ),
+        "portfolio_events": portfolio_events,
+        "portfolio_events_text": _format_portfolio_events_text(portfolio_events),
+    }
+
+    return enriched_rows, technical_text, portfolio_summary, client_psx_events
+
+
+PSX_COMPANY_URL = "https://dps.psx.com.pk/company/{symbol}"
+
+
+def _parse_fundamentals_from_html(html: str) -> dict[str, str]:
+    """Extract P/E ratio and EPS from a PSX company page."""
+    text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+    pe_match = re.search(r"P/E Ratio \(TTM\)\s*\*?\*?\s*([\d.]+)", text)
+    eps_match = re.search(
+        r"Annual.*?EPS\s+([\d.]+)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return {
+        "pe_ratio": pe_match.group(1) if pe_match else "N/A",
+        "eps": eps_match.group(1) if eps_match else "N/A",
+    }
+
+
+def fetch_fundamentals(symbols: set[str]) -> dict[str, dict[str, str]]:
+    """Fetch P/E ratio and EPS for each symbol from PSX company pages."""
+    fundamentals: dict[str, dict[str, str]] = {}
+    for index, symbol in enumerate(sorted(symbols)):
+        html = _fetch_html(PSX_COMPANY_URL.format(symbol=symbol))
+        if html:
+            try:
+                fundamentals[symbol] = _parse_fundamentals_from_html(html)
+            except Exception as exc:
+                print(f"Failed to parse fundamentals for {symbol}: {exc}", file=sys.stderr)
+                fundamentals[symbol] = {"pe_ratio": "N/A", "eps": "N/A"}
+        else:
+            fundamentals[symbol] = {"pe_ratio": "N/A", "eps": "N/A"}
+        if index < len(symbols) - 1:
+            time.sleep(0.3)
+    return fundamentals
+
+
+def _format_pe_eps(fund: dict[str, str]) -> str:
+    pe = fund.get("pe_ratio", "N/A")
+    eps = fund.get("eps", "N/A")
+    if pe == "N/A" and eps == "N/A":
+        return "N/A"
+    if eps != "N/A":
+        return f"{pe} / EPS {eps}"
+    return str(pe)
+
+
+def _format_holding_period(holding_days: int | None, cgt_status: str) -> str:
+    if holding_days is None or cgt_status == "N/A":
+        return "N/A"
+    return f"{holding_days} days — {cgt_status}"
+
+
+def enrich_portfolio_rows(
+    rows: list[dict[str, Any]],
+    portfolio: dict[str, Holding],
+    fundamentals: dict[str, dict[str, str]],
+) -> tuple[list[dict[str, Any]], str]:
+    """Merge sector, CGT, and fundamentals into technical rows."""
+    enriched: list[dict[str, Any]] = []
+    text_lines: list[str] = []
+
+    for row in rows:
+        symbol = row["symbol"]
+        holding = portfolio[symbol]
+        fund = fundamentals.get(symbol, {"pe_ratio": "N/A", "eps": "N/A"})
+        holding_days, cgt_status = _compute_cgt_status(holding["buy_date"])
+
+        updated = dict(row)
+        updated["sector"] = holding["sector"]
+        updated["holding_days"] = holding_days
+        updated["cgt_status"] = cgt_status
+        updated["pe_ratio"] = fund.get("pe_ratio", "N/A")
+        updated["eps"] = fund.get("eps", "N/A")
+        enriched.append(updated)
+
+        pl_text = "N/A"
+        if updated.get("pl_amount") is not None and updated.get("pl_pct") is not None:
+            pl_text = f"{_format_pkr(updated['pl_amount'])} ({updated['pl_pct']:+.2f}%)"
+
+        text_lines.append(
+            f"{symbol} | Sector: {holding['sector']} | Qty: {updated['quantity']:,} | "
+            f"Buy: {_format_number(updated['buy_price'])} | "
+            f"Current: {_format_number(updated.get('current_price'))} | P/L: {pl_text} | "
+            f"P/E & EPS: {_format_pe_eps(fund)} | "
+            f"Holding: {_format_holding_period(holding_days, cgt_status)} | "
+            f"RSI: {_format_number(updated.get('rsi'))} | "
+            f"R1: {_format_number(updated.get('r1'))} | S1: {_format_number(updated.get('s1'))}"
+        )
+
+    return enriched, "\n".join(text_lines)
+
+
+def compute_portfolio_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute total portfolio value, P/L, sector allocation, and risk warnings."""
+    total_value = 0.0
+    total_pl = 0.0
+    sector_values: dict[str, float] = {}
+
+    for row in rows:
+        current = row.get("current_price")
+        quantity = row.get("quantity", 0)
+        pl_amount = row.get("pl_amount")
+        sector = row.get("sector", "Unknown")
+
+        if current is not None and quantity:
+            position_value = current * quantity
+            total_value += position_value
+            sector_values[sector] = sector_values.get(sector, 0.0) + position_value
+        if pl_amount is not None:
+            total_pl += pl_amount
+
+    sector_allocation: dict[str, float] = {}
+    if total_value > 0:
+        sector_allocation = {
+            sector: (value / total_value) * 100
+            for sector, value in sector_values.items()
+        }
+
+    risk_warnings = [
+        f"{sector} at {pct:.1f}% (exceeds 40% limit)"
+        for sector, pct in sorted(sector_allocation.items(), key=lambda x: -x[1])
+        if pct > 40
+    ]
+
+    return {
+        "total_portfolio_value_pkr": total_value,
+        "total_unrealized_pl_pkr": total_pl,
+        "sector_allocation": sector_allocation,
+        "risk_warnings": risk_warnings,
+    }
+
+
+def format_portfolio_summary_for_prompt(summary: dict[str, Any]) -> str:
+    """Format portfolio summary as plain text for the AI prompt."""
+    lines = [
+        f"Total Portfolio Value (PKR): Rs. {summary['total_portfolio_value_pkr']:,.0f}",
+        f"Total Unrealized P/L (PKR): {_format_pkr(summary['total_unrealized_pl_pkr'])}",
+        "Sector Allocation:",
+    ]
+    for sector, pct in sorted(
+        summary["sector_allocation"].items(), key=lambda x: -x[1]
+    ):
+        lines.append(f"  - {sector}: {pct:.1f}%")
+
+    if summary["risk_warnings"]:
+        lines.append("RISK WARNINGS (>40% sector concentration):")
+        for warning in summary["risk_warnings"]:
+            lines.append(f"  - {warning}")
+    else:
+        lines.append("RISK WARNINGS: None (all sectors within 40% limit).")
+
+    return "\n".join(lines)
+
+
+def _extract_news_source(entry: Any) -> str:
+    """Extract publisher/source name from an RSS entry."""
+    source = getattr(entry, "source", None)
+    if source is not None:
+        title = getattr(source, "title", "") or getattr(source, "value", "")
+        if title:
+            return str(title).strip()
+    title = getattr(entry, "title", "").strip()
+    if " - " in title:
+        return title.rsplit(" - ", 1)[-1].strip()
+    return "News"
+
+
+def _normalize_news_item(entry: Any) -> dict[str, str] | None:
+    title = getattr(entry, "title", "").strip()
+    link = getattr(entry, "link", "").strip()
+    if not title:
+        return None
+    source = _extract_news_source(entry)
+    clean_title = title.rsplit(" - ", 1)[0].strip() if " - " in title else title
+    snippet = clean_title if len(clean_title) <= 140 else f"{clean_title[:137]}..."
+    return {
+        "title": clean_title,
+        "snippet": snippet,
+        "source": source,
+        "link": link,
+        "published": getattr(entry, "published", "").strip(),
+    }
 
 
 def fetch_pakistan_news(limit: int = 3) -> list[dict[str, str]]:
@@ -289,19 +864,43 @@ def fetch_pakistan_news(limit: int = 3) -> list[dict[str, str]]:
     try:
         feed = feedparser.parse(PAKISTAN_NEWS_URL)
         for entry in feed.entries:
-            title = getattr(entry, "title", "").strip()
-            link = getattr(entry, "link", "").strip()
-            published = getattr(entry, "published", "").strip()
-            if not title:
+            item = _normalize_news_item(entry)
+            if not item:
                 continue
-            headlines.append(
-                {"title": title, "link": link, "published": published}
-            )
+            headlines.append(item)
             if len(headlines) >= limit:
                 break
     except Exception as exc:
         print(f"News fetch failed: {exc}", file=sys.stderr)
     return headlines
+
+
+def fetch_global_finance_news(limit: int = 5) -> list[dict[str, str]]:
+    """Fetch top global financial news headlines from Google News RSS."""
+    headlines: list[dict[str, str]] = []
+    try:
+        feed = feedparser.parse(GLOBAL_FINANCE_NEWS_URL)
+        for entry in feed.entries:
+            item = _normalize_news_item(entry)
+            if not item:
+                continue
+            headlines.append(item)
+            if len(headlines) >= limit:
+                break
+    except Exception as exc:
+        print(f"Global news fetch failed: {exc}", file=sys.stderr)
+    return headlines
+
+
+def fetch_news_feeds(
+    pakistan_limit: int = 5,
+    global_limit: int = 5,
+) -> dict[str, list[dict[str, str]]]:
+    """Fetch Pakistan and global finance news for the API."""
+    return {
+        "pakistan": fetch_pakistan_news(limit=pakistan_limit),
+        "global": fetch_global_finance_news(limit=global_limit),
+    }
 
 
 def parse_psx_date(raw: str) -> date | None:
