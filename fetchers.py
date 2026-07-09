@@ -3,6 +3,7 @@ Data fetchers for PSX portfolio technicals, news, and corporate events.
 """
 
 import json
+import logging
 import re
 import sys
 import time
@@ -15,6 +16,8 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 from tradingview_ta import Interval, TA_Handler, get_multiple_analysis
+
+logger = logging.getLogger("smartsarmaya.fetchers")
 
 PAKISTAN_NEWS_URL = (
     "https://news.google.com/rss/search?"
@@ -35,11 +38,21 @@ HTTP_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+        "Chrome/91.0.4472.124 Safari/537.36"
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+INVESTING_KSE100_URL = "https://www.investing.com/indices/kse-100"
+
+_TV_ANALYSIS_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
+_TV_CACHE_TTL_SECONDS = 420
+_TV_POST_CALL_DELAY = 1.5
+_TV_RATE_LIMIT_BACKOFF = (5, 10)
+
+_KSE100_INDEX_CACHE: tuple[dict[str, Any], float] | None = None
+_KSE100_INDEX_CACHE_TTL_SECONDS = 180
 
 BOARD_MEETING_KEYWORDS = (
     "board",
@@ -358,45 +371,21 @@ def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
     if not symbols:
         return {}
 
-    symbol_list = sorted(symbols)
+    symbol_list = sorted(
+        s for s in (normalize_psx_symbol(raw) or str(raw).strip().upper() for raw in symbols) if s
+    )
     tv_symbols = [f"PSX:{ticker}" for ticker in symbol_list]
-    results: dict[str, Any] | None = None
-
-    for attempt in range(2):
-        try:
-            results = get_multiple_analysis(
-                screener="pakistan",
-                interval=Interval.INTERVAL_1_DAY,
-                symbols=tv_symbols,
-            )
-            break
-        except Exception as exc:
-            print(f"Stock fetch attempt {attempt + 1} failed: {exc}", file=sys.stderr)
-            if attempt == 0:
-                time.sleep(0.5)
+    results = _get_multiple_analysis_resilient(tv_symbols)
 
     indicators: dict[str, dict[str, Any]] = {}
 
-    if not results:
-        for symbol in symbol_list:
-            indicators[symbol] = {
-                "current_price": None,
-                "rsi": None,
-                "volume": None,
-                "r1": None,
-                "s1": None,
-                "error": "Batch fetch failed",
-            }
-        return indicators
-
     for symbol in symbol_list:
         symbol_key = f"PSX:{symbol}"
-        try:
-            analysis = results.get(symbol_key)
-            if analysis is None:
-                raise KeyError(f"No data returned for {symbol_key}")
+        data = results.get(symbol_key)
+        if not data:
+            data = _ta_handler_get_analysis_resilient(symbol)
 
-            data = analysis.indicators or {}
+        if data:
             indicators[symbol] = {
                 "current_price": data.get("close"),
                 "rsi": data.get("RSI"),
@@ -405,15 +394,14 @@ def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
                 "s1": data.get("Pivot.M.Classic.S1"),
                 "error": None,
             }
-        except Exception as exc:
-            print(f"Error processing {symbol}: {exc}", file=sys.stderr)
+        else:
             indicators[symbol] = {
                 "current_price": None,
                 "rsi": None,
                 "volume": None,
                 "r1": None,
                 "s1": None,
-                "error": str(exc),
+                "error": "Batch fetch failed",
             }
 
     return indicators
@@ -448,29 +436,173 @@ def normalize_psx_symbols(values: list[Any]) -> list[str]:
     return normalized
 
 
-def _fetch_symbol_live_price_with_handler(symbol: str) -> float | None:
-    """Fetch one symbol using TA_Handler with symbol-level retry."""
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Return True when TradingView signals HTTP 429 rate limiting."""
+    return "429" in str(exc)
+
+
+def _tv_symbol_key(symbol: str) -> str:
+    """Build normalized TradingView symbol key (e.g. PSX:OGDC)."""
+    if ":" in symbol:
+        exchange, _, ticker = symbol.partition(":")
+        cleaned = normalize_psx_symbol(ticker) or ticker.strip().upper()
+        return f"{exchange.strip().upper()}:{cleaned}"
+    cleaned = normalize_psx_symbol(symbol)
+    return f"PSX:{cleaned}" if cleaned else symbol.strip().upper()
+
+
+def _get_cached_tv_indicators(
+    tv_symbols: list[str],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Return cached indicator dicts and symbols that still need a network fetch."""
+    now = time.time()
+    cached: dict[str, dict[str, Any]] = {}
+    needed: list[str] = []
+    for raw in tv_symbols:
+        key = _tv_symbol_key(raw)
+        entry = _TV_ANALYSIS_CACHE.get(key)
+        if entry and now - entry[1] < _TV_CACHE_TTL_SECONDS:
+            cached[key] = entry[0]
+        elif key not in needed:
+            needed.append(key)
+    return cached, needed
+
+
+def _store_tv_indicators_in_cache(tv_symbol: str, indicators: dict[str, Any]) -> None:
+    """Store TradingView indicator payload in the shared in-memory cache."""
+    key = _tv_symbol_key(tv_symbol)
+    _TV_ANALYSIS_CACHE[key] = (indicators, time.time())
+
+
+def _get_close_from_tv_cache(symbol: str, cache_ttl_seconds: int) -> float | None:
+    """Read a cached close price for a PSX symbol when still fresh."""
+    key = _tv_symbol_key(symbol)
+    entry = _TV_ANALYSIS_CACHE.get(key)
+    if not entry:
+        return None
+    indicators, cached_at = entry
+    if time.time() - cached_at >= cache_ttl_seconds:
+        return None
+    close = indicators.get("close")
+    if close is None:
+        return None
+    try:
+        return float(close)
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_multiple_analysis_resilient(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """
+    Fetch TradingView batch analysis with per-symbol cache, 429 backoff, and delays.
+
+    Cold KSE-100 ticker loads issue ~5 batch calls; each call sleeps 1.5s afterward.
+    """
+    if not symbols:
+        return {}
+
+    normalized_keys = [_tv_symbol_key(symbol) for symbol in symbols]
+    cached, needed = _get_cached_tv_indicators(normalized_keys)
+    results: dict[str, dict[str, Any]] = dict(cached)
+
+    if not needed:
+        return results
+
+    fresh: dict[str, Any] | None = None
+    for attempt in range(2):
+        try:
+            fresh = get_multiple_analysis(
+                screener="pakistan",
+                interval=Interval.INTERVAL_1_DAY,
+                symbols=needed,
+            )
+            break
+        except Exception as exc:
+            logger.warning(
+                "TradingView batch fetch failed (attempt %s/2): %s",
+                attempt + 1,
+                exc,
+            )
+            if attempt < 1:
+                if _is_rate_limit_error(exc):
+                    time.sleep(_TV_RATE_LIMIT_BACKOFF[attempt])
+                else:
+                    time.sleep(0.5)
+        finally:
+            time.sleep(_TV_POST_CALL_DELAY)
+
+    if fresh:
+        for tv_symbol in needed:
+            analysis = fresh.get(tv_symbol)
+            if analysis is None:
+                continue
+            indicators = analysis.indicators or {}
+            _store_tv_indicators_in_cache(tv_symbol, indicators)
+            results[tv_symbol] = indicators
+
+    return results
+
+
+def _ta_handler_get_analysis_resilient(symbol: str) -> dict[str, Any] | None:
+    """Fetch one symbol via TA_Handler with cache, 429 backoff, and post-call delay."""
+    if ":" in symbol:
+        cleaned = normalize_psx_symbol(symbol.split(":", 1)[1])
+    else:
+        cleaned = normalize_psx_symbol(symbol)
+    if not cleaned:
+        return None
+
+    tv_key = f"PSX:{cleaned}"
+    cached, _ = _get_cached_tv_indicators([tv_key])
+    if tv_key in cached:
+        return cached[tv_key]
+
     for attempt in range(2):
         try:
             handler = TA_Handler(
-                symbol=symbol,
+                symbol=cleaned,
                 screener="pakistan",
                 exchange="PSX",
                 interval=Interval.INTERVAL_1_DAY,
             )
             analysis = handler.get_analysis()
-            close = (analysis.indicators or {}).get("close")
-            if close is None:
-                raise ValueError(f"Missing close price in TA_Handler response for {symbol}")
-            return float(close)
+            indicators = analysis.indicators or {}
+            if not indicators:
+                raise ValueError(f"Empty indicators for {cleaned}")
+            _store_tv_indicators_in_cache(tv_key, indicators)
+            return indicators
         except Exception as exc:
-            print(
-                f"TA_Handler get_analysis failed for {symbol} (attempt {attempt + 1}/2): {exc}",
-                file=sys.stderr,
+            logger.warning(
+                "TA_Handler failed for %s (attempt %s/2): %s",
+                cleaned,
+                attempt + 1,
+                exc,
             )
-            if attempt == 0:
-                time.sleep(0.35)
+            if attempt < 1:
+                if _is_rate_limit_error(exc):
+                    time.sleep(_TV_RATE_LIMIT_BACKOFF[attempt])
+                else:
+                    time.sleep(0.5)
+        finally:
+            time.sleep(_TV_POST_CALL_DELAY)
     return None
+
+
+def _fetch_symbol_live_price_with_handler(symbol: str) -> float | None:
+    """Fetch one symbol close price using the resilient TA_Handler wrapper."""
+    cleaned = normalize_psx_symbol(symbol)
+    if not cleaned:
+        return None
+    indicators = _ta_handler_get_analysis_resilient(cleaned)
+    if not indicators:
+        return None
+    close = indicators.get("close")
+    if close is None:
+        return None
+    try:
+        return float(close)
+    except (TypeError, ValueError):
+        return None
 
 
 def fetch_live_prices_for_symbols(
@@ -488,6 +620,10 @@ def fetch_live_prices_for_symbols(
     uncached: list[str] = []
 
     for symbol in normalized:
+        cached_price = _get_close_from_tv_cache(symbol, cache_ttl_seconds)
+        if cached_price is not None:
+            prices[symbol] = cached_price
+            continue
         cached = _LIVE_PRICE_CACHE.get(symbol)
         if cached and now - cached[1] < cache_ttl_seconds:
             prices[symbol] = cached[0]
@@ -496,33 +632,18 @@ def fetch_live_prices_for_symbols(
 
     if uncached:
         tv_symbols = [f"PSX:{symbol}" for symbol in uncached]
-        results: dict[str, Any] | None = None
-        for attempt in range(2):
-            try:
-                results = get_multiple_analysis(
-                    screener="pakistan",
-                    interval=Interval.INTERVAL_1_DAY,
-                    symbols=tv_symbols,
-                )
-                break
-            except Exception as exc:
-                print(
-                    f"Live price fetch attempt {attempt + 1} failed: {exc}",
-                    file=sys.stderr,
-                )
-                if attempt == 0:
-                    time.sleep(0.4)
+        results = _get_multiple_analysis_resilient(tv_symbols)
 
         for symbol in uncached:
             close_price: float | None = None
             try:
-                analysis = (results or {}).get(f"PSX:{symbol}")
-                if analysis and analysis.indicators:
-                    close = analysis.indicators.get("close")
+                data = results.get(f"PSX:{symbol}")
+                if data:
+                    close = data.get("close")
                     if close is not None:
                         close_price = float(close)
             except Exception as exc:
-                print(f"Live price parse error for {symbol}: {exc}", file=sys.stderr)
+                logger.warning("Live price parse error for %s: %s", symbol, exc)
 
             prices[symbol] = close_price
             if close_price is not None:
@@ -568,7 +689,7 @@ KSE100_TOP_15_FALLBACK_SYMBOLS = [
 
 _MARKET_TICKER_CACHE: tuple[list[dict[str, Any]], float] | None = None
 _MARKET_TICKER_CACHE_TTL_SECONDS = 300
-_MARKET_TICKER_FETCH_BUDGET_SECONDS = 7.0
+_MARKET_TICKER_FETCH_BUDGET_SECONDS = 20.0
 _KSE100_SYMBOLS_CACHE: tuple[list[str], float] | None = None
 _KSE100_SYMBOLS_CACHE_TTL_SECONDS = 6 * 60 * 60
 
@@ -605,7 +726,7 @@ def _load_kse100_symbols() -> list[str]:
                 if symbol and symbol != "PSX":
                     symbols.append(symbol)
     except Exception as exc:
-        print(f"Failed to parse KSE-100 constituents: {exc}", file=sys.stderr)
+        logger.warning("Failed to parse KSE-100 constituents: %s", exc)
         return KSE100_TOP_15_FALLBACK_SYMBOLS
 
     deduped = normalize_psx_symbols(symbols)
@@ -671,28 +792,17 @@ def _chunked(items: list[str], size: int) -> list[list[str]]:
 
 
 def _fetch_symbol_ticker_with_handler(symbol: str) -> dict[str, Any] | None:
-    """Fetch one symbol ticker fields using TA_Handler with symbol-level retry."""
-    for attempt in range(2):
-        try:
-            handler = TA_Handler(
-                symbol=symbol,
-                screener="pakistan",
-                exchange="PSX",
-                interval=Interval.INTERVAL_1_DAY,
-            )
-            analysis = handler.get_analysis()
-            indicators = analysis.indicators or {}
-            if indicators.get("close") is None:
-                raise ValueError(f"Missing close price in TA_Handler response for {symbol}")
-            return _parse_ticker_indicators(indicators)
-        except Exception as exc:
-            print(
-                f"TA_Handler ticker fetch failed for {symbol} (attempt {attempt + 1}/2): {exc}",
-                file=sys.stderr,
-            )
-            if attempt == 0:
-                time.sleep(0.35)
-    return None
+    """Fetch one symbol ticker fields using the resilient TA_Handler wrapper."""
+    cleaned = normalize_psx_symbol(symbol)
+    if not cleaned:
+        return None
+    indicators = _ta_handler_get_analysis_resilient(cleaned)
+    if not indicators:
+        return None
+    if indicators.get("close") is None:
+        logger.warning("TA_Handler ticker fetch missing close for %s", cleaned)
+        return None
+    return _parse_ticker_indicators(indicators)
 
 
 def fetch_market_ticker() -> list[dict[str, Any]]:
@@ -713,24 +823,12 @@ def fetch_market_ticker() -> list[dict[str, Any]]:
     deadline = time.time() + _MARKET_TICKER_FETCH_BUDGET_SECONDS
     for chunk_index, chunk in enumerate(symbol_chunks):
         if time.time() > deadline:
-            print("Market ticker fetch budget exceeded; returning partial snapshot.", file=sys.stderr)
+            logger.warning(
+                "Market ticker fetch budget exceeded; returning partial snapshot."
+            )
             break
         chunk_tv_symbols = [f"PSX:{symbol}" for symbol in chunk]
-        chunk_results: dict[str, Any] | None = None
-        for attempt in range(1):
-            try:
-                chunk_results = get_multiple_analysis(
-                    screener="pakistan",
-                    interval=Interval.INTERVAL_1_DAY,
-                    symbols=chunk_tv_symbols,
-                )
-                break
-            except Exception as exc:
-                print(
-                    f"Market ticker chunk {chunk_index + 1}/{len(symbol_chunks)} "
-                    f"attempt {attempt + 1} failed: {exc}",
-                    file=sys.stderr,
-                )
+        chunk_results = _get_multiple_analysis_resilient(chunk_tv_symbols)
         if chunk_results:
             results.update(chunk_results)
 
@@ -738,12 +836,12 @@ def fetch_market_ticker() -> list[dict[str, Any]]:
     for symbol in symbol_list:
         symbol_key = f"PSX:{symbol}"
         try:
-            analysis = (results or {}).get(symbol_key)
-            if analysis is None:
+            data = (results or {}).get(symbol_key)
+            if data is None:
                 raise KeyError(f"No data returned for {symbol_key}")
-            parsed_by_symbol[symbol] = _parse_ticker_indicators(analysis.indicators or {})
+            parsed_by_symbol[symbol] = _parse_ticker_indicators(data)
         except Exception as exc:
-            print(f"Market ticker parse error for {symbol}: {exc}", file=sys.stderr)
+            logger.warning("Market ticker parse error for %s: %s", symbol, exc)
 
     # Per-symbol recovery is capped to avoid rate-limit storms.
     missing_symbols = [
@@ -766,14 +864,12 @@ def fetch_market_ticker() -> list[dict[str, Any]]:
     valid_price_count = sum(1 for row in rows if row["current_price"] > 0)
     if valid_price_count == 0:
         if stale_cache:
-            print(
-                "Market ticker fetch returned zero valid prices; serving previous cached snapshot.",
-                file=sys.stderr,
+            logger.warning(
+                "Market ticker fetch returned zero valid prices; serving previous cached snapshot."
             )
             return stale_cache
-        print(
-            "Market ticker fetch returned zero valid prices and no prior cache is available.",
-            file=sys.stderr,
+        logger.warning(
+            "Market ticker fetch returned zero valid prices and no prior cache is available."
         )
 
     _MARKET_TICKER_CACHE = (rows, now)
@@ -798,9 +894,17 @@ def _load_psx_symbols() -> list[dict[str, str]]:
         return _PSX_SYMBOLS_CACHE or []
 
     try:
-        raw_items = json.loads(html.strip())
+        stripped = html.strip()
+        if not stripped.startswith(("[", "{")):
+            logger.warning(
+                "PSX symbols endpoint returned non-JSON payload (len=%s).",
+                len(stripped),
+            )
+            return _PSX_SYMBOLS_CACHE or []
+
+        raw_items = json.loads(stripped)
     except json.JSONDecodeError as exc:
-        print(f"Failed to parse PSX symbols JSON: {exc}", file=sys.stderr)
+        logger.error("Failed to parse PSX symbols JSON: %s", exc, exc_info=True)
         return _PSX_SYMBOLS_CACHE or []
 
     symbols: list[dict[str, str]] = []
@@ -860,8 +964,106 @@ def search_psx_symbols(query: str, limit: int = 8) -> list[dict[str, str]]:
     return results
 
 
+def _fetch_kse100_from_psx_homepage() -> tuple[float | None, list[float]]:
+    """Scrape KSE-100 index value from the PSX homepage."""
+    html = _fetch_html("https://dps.psx.com.pk/")
+    if not html:
+        return None, []
+    try:
+        text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+        match = re.search(r"KSE\s*100[^\d]*([\d,]+\.?\d*)", text, re.IGNORECASE)
+        if not match:
+            return None, []
+        value = float(match.group(1).replace(",", ""))
+        sparkline = [value * 0.99, value * 0.995, value * 1.002, value * 0.998, value]
+        return value, sparkline
+    except Exception as exc:
+        logger.warning("Failed to parse KSE-100 from PSX homepage: %s", exc, exc_info=True)
+        return None, []
+
+
+def _fetch_kse100_from_investing() -> tuple[float | None, float | None, float | None, list[float]]:
+    """Scrape KSE-100 index value from Investing.com as a secondary fallback."""
+    html = _fetch_html(INVESTING_KSE100_URL)
+    if not html:
+        return None, None, None, []
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        value: float | None = None
+        change: float | None = None
+        change_pct: float | None = None
+
+        price_el = soup.select_one('[data-test="instrument-price-last"]')
+        if price_el:
+            value = float(price_el.get_text(strip=True).replace(",", ""))
+        else:
+            match = re.search(
+                r'data-test="instrument-price-last"[^>]*>([\d,]+\.?\d*)',
+                html,
+            )
+            if match:
+                value = float(match.group(1).replace(",", ""))
+
+        change_el = soup.select_one('[data-test="instrument-price-change"]')
+        if change_el:
+            change_text = change_el.get_text(strip=True).replace(",", "")
+            change = float(change_text.replace("+", ""))
+
+        pct_el = soup.select_one('[data-test="instrument-price-change-percent"]')
+        if pct_el:
+            pct_text = pct_el.get_text(strip=True).replace("%", "").replace(",", "")
+            change_pct = float(pct_text.replace("+", "").replace("(", "").replace(")", ""))
+
+        sparkline: list[float] = []
+        if value is not None:
+            sparkline = [value * 0.99, value * 0.995, value * 1.002, value * 0.998, value]
+        return value, change, change_pct, sparkline
+    except Exception as exc:
+        logger.error("Failed to parse KSE-100 from Investing.com: %s", exc, exc_info=True)
+        return None, None, None, []
+
+
+def _build_kse100_index_response(
+    value: float,
+    change: float | None,
+    change_pct: float | None,
+    sparkline: list[float],
+) -> dict[str, Any]:
+    if change is None and sparkline and len(sparkline) >= 2:
+        change = sparkline[-1] - sparkline[0]
+    if change_pct is None and sparkline and sparkline[0]:
+        change_pct = (change or 0) / sparkline[0] * 100
+
+    return {
+        "name": "KSE-100 Index",
+        "value": round(value, 2),
+        "change": round(change or 0, 2),
+        "change_pct": round(change_pct or 0, 2),
+        "sparkline": [round(v, 2) for v in sparkline] if sparkline else [round(value, 2)],
+    }
+
+
+def _zeroed_kse100_index() -> dict[str, Any]:
+    return {
+        "name": "KSE-100 Index",
+        "value": 0.0,
+        "change": 0.0,
+        "change_pct": 0.0,
+        "sparkline": [0, 0, 0, 0, 0],
+    }
+
+
 def fetch_kse100_index() -> dict[str, Any]:
-    """Fetch KSE-100 index value and sparkline data from TradingView."""
+    """Fetch KSE-100 index value with TradingView, PSX, and Investing.com fallbacks."""
+    global _KSE100_INDEX_CACHE
+
+    now = time.time()
+    if (
+        _KSE100_INDEX_CACHE is not None
+        and now - _KSE100_INDEX_CACHE[1] < _KSE100_INDEX_CACHE_TTL_SECONDS
+    ):
+        return _KSE100_INDEX_CACHE[0]
+
     index_symbols = ["PSX:KSE100", "KSE:KSE100", "PSX:KSE100INDEX"]
     value: float | None = None
     change: float | None = None
@@ -870,16 +1072,11 @@ def fetch_kse100_index() -> dict[str, Any]:
 
     for tv_symbol in index_symbols:
         try:
-            results = get_multiple_analysis(
-                screener="pakistan",
-                interval=Interval.INTERVAL_1_DAY,
-                symbols=[tv_symbol],
-            )
-            analysis = results.get(tv_symbol) if results else None
-            if analysis is None:
+            results = _get_multiple_analysis_resilient([tv_symbol])
+            data = results.get(_tv_symbol_key(tv_symbol))
+            if not data:
                 continue
 
-            data = analysis.indicators or {}
             close = data.get("close")
             if close is None:
                 continue
@@ -904,38 +1101,32 @@ def fetch_kse100_index() -> dict[str, Any]:
             ]
             break
         except Exception as exc:
-            print(f"KSE-100 fetch via {tv_symbol} failed: {exc}", file=sys.stderr)
+            logger.warning("KSE-100 fetch via %s failed: %s", tv_symbol, exc)
 
     if value is None:
-        html = _fetch_html("https://dps.psx.com.pk/")
-        if html:
-            text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
-            match = re.search(r"KSE\s*100[^\d]*([\d,]+\.?\d*)", text, re.IGNORECASE)
-            if match:
-                value = float(match.group(1).replace(",", ""))
-                sparkline = [value * 0.99, value * 0.995, value * 1.002, value * 0.998, value]
+        psx_value, psx_sparkline = _fetch_kse100_from_psx_homepage()
+        if psx_value is not None:
+            value = psx_value
+            sparkline = psx_sparkline
 
     if value is None:
-        return {
-            "name": "KSE-100 Index",
-            "value": 0.0,
-            "change": 0.0,
-            "change_pct": 0.0,
-            "sparkline": [0, 0, 0, 0, 0],
-        }
+        investing_value, investing_change, investing_pct, investing_sparkline = (
+            _fetch_kse100_from_investing()
+        )
+        if investing_value is not None:
+            value = investing_value
+            change = investing_change
+            change_pct = investing_pct
+            sparkline = investing_sparkline
 
-    if change is None and sparkline and len(sparkline) >= 2:
-        change = sparkline[-1] - sparkline[0]
-    if change_pct is None and sparkline and sparkline[0]:
-        change_pct = (change or 0) / sparkline[0] * 100
+    if value is None:
+        response = _zeroed_kse100_index()
+        _KSE100_INDEX_CACHE = (response, now)
+        return response
 
-    return {
-        "name": "KSE-100 Index",
-        "value": round(value, 2),
-        "change": round(change or 0, 2),
-        "change_pct": round(change_pct or 0, 2),
-        "sparkline": [round(v, 2) for v in sparkline] if sparkline else [value],
-    }
+    response = _build_kse100_index_response(value, change, change_pct, sparkline)
+    _KSE100_INDEX_CACHE = (response, now)
+    return response
 
 
 def fetch_technical_data(
@@ -1063,7 +1254,9 @@ def fetch_fundamentals(symbols: set[str]) -> dict[str, dict[str, str]]:
             try:
                 fundamentals[symbol] = _parse_fundamentals_from_html(html)
             except Exception as exc:
-                print(f"Failed to parse fundamentals for {symbol}: {exc}", file=sys.stderr)
+                logger.error(
+                    "Failed to parse fundamentals for %s: %s", symbol, exc, exc_info=True
+                )
                 fundamentals[symbol] = {"pe_ratio": "N/A", "eps": "N/A"}
         else:
             fundamentals[symbol] = {"pe_ratio": "N/A", "eps": "N/A"}
@@ -1413,15 +1606,45 @@ def _format_portfolio_events_text(events_map: dict[str, str]) -> str:
     )
 
 
+def _fetch_html_with_retry(
+    url: str,
+    *,
+    attempts: int = 2,
+    retry_delay: float = 3.0,
+) -> str | None:
+    """Fetch HTML with browser-like headers, retrying transient failures."""
+    for attempt in range(attempts):
+        try:
+            response = requests.get(url, headers=HTTP_HEADERS, timeout=15)
+            response.raise_for_status()
+            text = response.text
+            if not text or not text.strip():
+                raise ValueError(f"Empty response body from {url}")
+            return text
+        except Exception as exc:
+            if attempt < attempts - 1:
+                logger.warning(
+                    "Failed to fetch %s (attempt %s/%s): %s",
+                    url,
+                    attempt + 1,
+                    attempts,
+                    exc,
+                )
+                time.sleep(retry_delay)
+            else:
+                logger.warning(
+                    "Failed to fetch %s after %s attempts: %s",
+                    url,
+                    attempts,
+                    exc,
+                    exc_info=True,
+                )
+    return None
+
+
 def _fetch_html(url: str) -> str | None:
     """Fetch a PSX page with browser-like headers."""
-    try:
-        response = requests.get(url, headers=HTTP_HEADERS, timeout=15)
-        response.raise_for_status()
-        return response.text
-    except Exception as exc:
-        print(f"Failed to fetch {url}: {exc}", file=sys.stderr)
-        return None
+    return _fetch_html_with_retry(url)
 
 
 def _normalize_header(text: str) -> str:
@@ -1550,7 +1773,7 @@ def _scrape_company_events(symbol: str) -> tuple[list[dict[str, str]], list[dict
     try:
         return _parse_company_event_tables(html, symbol.upper())
     except Exception as exc:
-        print(f"Failed to parse company page for {symbol}: {exc}", file=sys.stderr)
+        logger.error("Failed to parse company page for %s: %s", symbol, exc, exc_info=True)
         return [], []
 
 
@@ -1596,7 +1819,7 @@ def scrape_psx_payouts(limit: int = 15) -> list[dict[str, str]]:
 
         return payouts[:limit]
     except Exception as exc:
-        print(f"Failed to parse PSX payouts: {exc}", file=sys.stderr)
+        logger.error("Failed to parse PSX payouts: %s", exc, exc_info=True)
         return []
 
 
@@ -1633,7 +1856,7 @@ def scrape_psx_board_meetings(limit: int = 10) -> list[dict[str, str]]:
 
         return announcements[:limit]
     except Exception as exc:
-        print(f"Failed to parse PSX announcements: {exc}", file=sys.stderr)
+        logger.error("Failed to parse PSX announcements: %s", exc, exc_info=True)
         return []
 
 

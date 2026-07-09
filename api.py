@@ -2,10 +2,12 @@
 PSX AI FastAPI backend — stateless portfolio analysis and top picks.
 """
 
+import logging
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from service import (
@@ -17,7 +19,15 @@ from service import (
     get_market_ticker,
     get_news,
     get_symbol_suggestions,
+    load_api_config,
 )
+
+logger = logging.getLogger("smartsarmaya.api")
+if not logger.handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
 
 app = FastAPI(title="SmartSarmaya API", version="1.0.0")
 
@@ -28,6 +38,54 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def startup_validate_config() -> None:
+    """Fail fast on critical env/config errors in deployment."""
+    try:
+        cfg = load_api_config()
+        logger.info(
+            "Startup config validated (AI model: %s).",
+            cfg.get("model_name", "unknown"),
+        )
+    except Exception:
+        logger.exception("Startup configuration validation failed.")
+        raise
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info("Request started: %s %s", request.method, request.url.path)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Unhandled middleware exception for %s", request.url.path)
+        raise
+    logger.info(
+        "Request completed: %s %s -> %s",
+        request.method,
+        request.url.path,
+        response.status_code,
+    )
+    return response
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error(
+        "Unhandled exception at %s: %s",
+        request.url.path,
+        exc,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "details": "Something went wrong while processing the request.",
+        },
+    )
 
 
 class ShareInput(BaseModel):
@@ -154,8 +212,10 @@ def analyze_portfolio_endpoint(request: PortfolioRequest) -> AnalyzePortfolioRes
             raise HTTPException(status_code=503, detail=message) from exc
         if "temporarily unavailable" in message.lower():
             raise HTTPException(status_code=503, detail=message) from exc
+        logger.warning("analyze_portfolio validation error: %s", message)
         raise HTTPException(status_code=400, detail=message) from exc
     except Exception as exc:
+        logger.exception("analyze_portfolio failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to generate portfolio report.",
@@ -171,8 +231,10 @@ def top_picks_endpoint() -> TopPicksResponse:
         message = str(exc)
         if "GEMINI_API_KEY" in message:
             raise HTTPException(status_code=503, detail=message) from exc
+        logger.warning("top_picks validation error: %s", message)
         raise HTTPException(status_code=400, detail=message) from exc
     except Exception as exc:
+        logger.exception("top_picks failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to generate top picks report.",
@@ -188,6 +250,7 @@ def news_endpoint() -> NewsResponse:
             global_news=[NewsItem(**item) for item in data["global"]],
         )
     except Exception as exc:
+        logger.exception("news endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch news.",
@@ -199,6 +262,7 @@ def market_index_endpoint() -> MarketIndexResponse:
     try:
         return MarketIndexResponse(**get_market_index())
     except Exception as exc:
+        logger.exception("market_index endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch market index.",
@@ -210,6 +274,7 @@ def market_ticker_endpoint() -> list[MarketTickerItem]:
     try:
         return [MarketTickerItem(**item) for item in get_market_ticker()]
     except Exception as exc:
+        logger.exception("market_ticker endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch market ticker data.",
@@ -221,6 +286,7 @@ def dividend_calendar_endpoint() -> list[DividendCalendarItem]:
     try:
         return [DividendCalendarItem(**item) for item in get_dividend_calendar()]
     except Exception as exc:
+        logger.exception("dividend_calendar endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch dividend calendar.",
@@ -236,6 +302,7 @@ def symbols_endpoint(q: str = "", limit: int = 8) -> SymbolSearchResponse:
             results=[SymbolSuggestion(**item) for item in results],
         )
     except Exception as exc:
+        logger.exception("symbols endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch symbol suggestions.",
@@ -251,8 +318,10 @@ def analyze_single_stock_endpoint(request: SingleStockRequest) -> SingleStockAna
         message = str(exc)
         if "GEMINI_API_KEY" in message:
             raise HTTPException(status_code=503, detail=message) from exc
+        logger.warning("analyze_single_stock validation error: %s", message)
         raise HTTPException(status_code=400, detail=message) from exc
     except Exception as exc:
+        logger.exception("analyze_single_stock failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to analyze single stock.",
