@@ -9,6 +9,7 @@ type SymbolAutocompleteProps = {
   placeholder?: string;
   disabled?: boolean;
   excludeSymbols?: string[];
+  className?: string;
 };
 
 export default function SymbolAutocomplete({
@@ -17,6 +18,7 @@ export default function SymbolAutocomplete({
   placeholder = "OGDC",
   disabled = false,
   excludeSymbols = [],
+  className = "",
 }: SymbolAutocompleteProps) {
   const listId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,7 +133,10 @@ export default function SymbolAutocomplete({
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
-        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[#0B132B] uppercase outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+        className={
+          className ||
+          "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[#0B132B] uppercase outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+        }
       />
 
       {open && suggestions.length > 0 && (

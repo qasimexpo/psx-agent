@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Search } from "lucide-react";
+import SymbolAutocomplete from "@/components/SymbolAutocomplete";
 import { analyzeSingleStock, type SingleStockAnalyzeResult } from "@/lib/api";
 
 const actionBadgeClasses: Record<string, string> = {
@@ -65,13 +66,13 @@ export default function QuickStockAnalyzer() {
         <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
+              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <SymbolAutocomplete
                 value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
+                onChange={setSymbol}
                 placeholder="e.g., OGDC, LUCK, HUBC"
                 disabled={loading}
-                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-9 pr-3 text-sm text-[#0B132B] outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 sm:text-base"
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-9 pr-3 text-sm text-[#0B132B] uppercase outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 sm:text-base"
               />
             </div>
             <button
