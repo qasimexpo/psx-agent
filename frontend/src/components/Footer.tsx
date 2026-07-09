@@ -22,16 +22,28 @@ export default function Footer() {
           </div>
 
           <nav className="flex flex-wrap gap-4 text-sm">
-            <Link href="/privacy" className="text-slate-300 transition hover:text-emerald-400">
+            <Link
+              href="/privacy-policy"
+              className="text-slate-300 transition hover:text-emerald-400"
+            >
               Privacy Policy
             </Link>
-            <Link href="/terms" className="text-slate-300 transition hover:text-emerald-400">
+            <Link
+              href="/terms-of-service"
+              className="text-slate-300 transition hover:text-emerald-400"
+            >
               Terms of Service
             </Link>
           </nav>
         </div>
 
-        <p className="mt-8 border-t border-[#1e293b] pt-6 text-center text-xs text-slate-500">
+        <p className="mt-8 border-t border-[#1e293b] pt-6 text-center text-xs text-slate-400">
+          Market data is sourced via third-party APIs and may be delayed. The AI insights
+          provided are for educational purposes only and do not constitute professional
+          financial advice. Always consult a licensed broker.
+        </p>
+
+        <p className="mt-3 text-center text-xs text-slate-500">
           &copy; {new Date().getFullYear()} SmartSarmaya.com. All rights reserved.
         </p>
       </div>

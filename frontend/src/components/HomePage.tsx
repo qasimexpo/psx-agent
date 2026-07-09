@@ -3,12 +3,14 @@
 import { useCallback, useState } from "react";
 import AnalysisProgressModal from "@/components/AnalysisProgressModal";
 import GoogleAd from "@/components/GoogleAd";
+import DividendCalendar from "@/components/DividendCalendar";
 import Hero from "@/components/Hero";
 import MarketIndexBar from "@/components/MarketIndexBar";
 import NewsSection from "@/components/NewsSection";
 import PortfolioForm from "@/components/PortfolioForm";
 import QuickStockAnalyzer from "@/components/QuickStockAnalyzer";
 import ReportView from "@/components/ReportView";
+import SmartTicker from "@/components/SmartTicker";
 import TopPicks from "@/components/TopPicks";
 import type { AnalyzeResult } from "@/lib/api";
 
@@ -69,6 +71,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+      <SmartTicker />
       <MarketIndexBar />
       <PortfolioForm
         onReport={handleReport}
@@ -83,6 +86,7 @@ export default function HomePage() {
       <ReportView data={report} loading={showProgress} />
       <TopPicks />
       <QuickStockAnalyzer />
+      <DividendCalendar />
       <NewsSection />
 
       <AnalysisProgressModal

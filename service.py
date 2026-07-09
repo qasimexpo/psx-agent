@@ -20,9 +20,11 @@ from ai_agent import (
 from fetchers import (
     build_client_report_data,
     build_market_data_cache,
+    fetch_dividend_calendar,
     fetch_kse100_index,
     fetch_live_prices_for_symbols,
     fetch_market_indicators,
+    fetch_market_ticker,
     fetch_news_feeds,
     fetch_pakistan_news,
     format_news_for_prompt,
@@ -138,6 +140,16 @@ def get_market_index() -> dict[str, Any]:
     return fetch_kse100_index()
 
 
+def get_market_ticker() -> list[dict[str, Any]]:
+    """Fetch cached technical ticker data for top KSE-100 symbols."""
+    return fetch_market_ticker()
+
+
+def get_dividend_calendar() -> list[dict[str, str]]:
+    """Fetch upcoming dividend and board-meeting events."""
+    return fetch_dividend_calendar()
+
+
 def get_symbol_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
     """Return PSX symbol autocomplete suggestions."""
     return search_psx_symbols(query, limit=limit)
@@ -156,10 +168,21 @@ def analyze_single_stock(symbol: str) -> dict[str, str]:
     config = load_api_config()
     market = fetch_live_prices_for_symbols([normalized_symbol]).get(normalized_symbol)
     indicators = fetch_market_indicators({normalized_symbol}).get(normalized_symbol, {})
-    if market is None and indicators.get("current_price") is None:
-        raise ValueError(f"Could not fetch live market data for symbol: {normalized_symbol}")
-
     current_price = market if market is not None else indicators.get("current_price")
+    if current_price is None:
+        # Fallback to the market ticker snapshot when direct quote endpoints are rate-limited.
+        ticker_map = {row.get("symbol"): row for row in fetch_market_ticker()}
+        ticker_row = ticker_map.get(normalized_symbol, {})
+        ticker_price = ticker_row.get("current_price")
+        if isinstance(ticker_price, (int, float)) and ticker_price > 0:
+            current_price = float(ticker_price)
+
+    if current_price is None:
+        raise ValueError(
+            "Live market data is temporarily unavailable for this symbol. "
+            "Please try again in a few minutes."
+        )
+
     rsi = indicators.get("rsi")
     support_1 = indicators.get("s1")
     resistance_1 = indicators.get("r1")

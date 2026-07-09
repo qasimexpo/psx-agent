@@ -29,6 +29,7 @@ GLOBAL_FINANCE_NEWS_URL = (
 PSX_PAYOUTS_URL = "https://dps.psx.com.pk/payouts"
 PSX_ANNOUNCEMENTS_URL = "https://dps.psx.com.pk/announcements/companies"
 PSX_SYMBOLS_URL = "https://dps.psx.com.pk/symbols"
+PSX_KSE100_CONSTITUENTS_URL = "https://dps.psx.com.pk/indices/KSE100"
 
 HTTP_HEADERS = {
     "User-Agent": (
@@ -545,6 +546,238 @@ def fetch_live_prices_for_symbols(
     for symbol in normalized:
         ordered[symbol] = prices.get(symbol)
     return ordered
+
+
+KSE100_TOP_15_FALLBACK_SYMBOLS = [
+    "OGDC",
+    "PPL",
+    "LUCK",
+    "HUBC",
+    "ENGRO",
+    "MEBL",
+    "SYS",
+    "EFERT",
+    "FFC",
+    "MARI",
+    "PSO",
+    "DGKC",
+    "POL",
+    "MCB",
+    "BAHL",
+]
+
+_MARKET_TICKER_CACHE: tuple[list[dict[str, Any]], float] | None = None
+_MARKET_TICKER_CACHE_TTL_SECONDS = 300
+_MARKET_TICKER_FETCH_BUDGET_SECONDS = 7.0
+_KSE100_SYMBOLS_CACHE: tuple[list[str], float] | None = None
+_KSE100_SYMBOLS_CACHE_TTL_SECONDS = 6 * 60 * 60
+
+
+def _load_kse100_symbols() -> list[str]:
+    """Load KSE-100 constituents from PSX; fallback to a fixed shortlist."""
+    global _KSE100_SYMBOLS_CACHE
+
+    now = time.time()
+    if (
+        _KSE100_SYMBOLS_CACHE is not None
+        and now - _KSE100_SYMBOLS_CACHE[1] < _KSE100_SYMBOLS_CACHE_TTL_SECONDS
+    ):
+        return _KSE100_SYMBOLS_CACHE[0]
+
+    html = _fetch_html(PSX_KSE100_CONSTITUENTS_URL)
+    if not html:
+        return KSE100_TOP_15_FALLBACK_SYMBOLS
+
+    symbols: list[str] = []
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        table = soup.find("table")
+        if table:
+            body_rows = table.find_all("tr")
+            for row in body_rows[1:]:
+                cells = row.find_all("td")
+                if not cells:
+                    continue
+                raw_symbol = cells[0].get_text(" ", strip=True).upper()
+                # Accept values like "PSX: SYS", "SYS:", or "SYS".
+                raw_symbol = raw_symbol.replace("PSX:", "").strip().strip(":")
+                symbol = normalize_psx_symbol(raw_symbol)
+                if symbol and symbol != "PSX":
+                    symbols.append(symbol)
+    except Exception as exc:
+        print(f"Failed to parse KSE-100 constituents: {exc}", file=sys.stderr)
+        return KSE100_TOP_15_FALLBACK_SYMBOLS
+
+    deduped = normalize_psx_symbols(symbols)
+    if not deduped:
+        return KSE100_TOP_15_FALLBACK_SYMBOLS
+
+    _KSE100_SYMBOLS_CACHE = (deduped, now)
+    return deduped
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_ticker_row(symbol: str, data: dict[str, Any]) -> dict[str, Any]:
+    close = _to_float(data.get("close") or data.get("current_price"))
+    high = _to_float(data.get("high"))
+    low = _to_float(data.get("low"))
+    open_price = _to_float(data.get("open"))
+    r1 = _to_float(data.get("r1"))
+    s1 = _to_float(data.get("s1"))
+
+    if high is None and r1 is not None:
+        high = r1
+    if low is None and s1 is not None:
+        low = s1
+
+    change = _to_float(data.get("change"))
+    if change is None and close is not None and open_price is not None:
+        change = close - open_price
+    if change is None:
+        change = 0.0
+
+    return {
+        "symbol": symbol,
+        "current_price": round(close, 2) if close is not None else 0.0,
+        "high": round(high, 2) if high is not None else 0.0,
+        "low": round(low, 2) if low is not None else 0.0,
+        "change": round(change, 2),
+        "direction": "UP" if change >= 0 else "DOWN",
+    }
+
+
+def _parse_ticker_indicators(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "close": data.get("close"),
+        "open": data.get("open"),
+        "high": data.get("high"),
+        "low": data.get("low"),
+        "change": data.get("change"),
+        "r1": data.get("Pivot.M.Classic.R1"),
+        "s1": data.get("Pivot.M.Classic.S1"),
+    }
+
+
+def _chunked(items: list[str], size: int) -> list[list[str]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _fetch_symbol_ticker_with_handler(symbol: str) -> dict[str, Any] | None:
+    """Fetch one symbol ticker fields using TA_Handler with symbol-level retry."""
+    for attempt in range(2):
+        try:
+            handler = TA_Handler(
+                symbol=symbol,
+                screener="pakistan",
+                exchange="PSX",
+                interval=Interval.INTERVAL_1_DAY,
+            )
+            analysis = handler.get_analysis()
+            indicators = analysis.indicators or {}
+            if indicators.get("close") is None:
+                raise ValueError(f"Missing close price in TA_Handler response for {symbol}")
+            return _parse_ticker_indicators(indicators)
+        except Exception as exc:
+            print(
+                f"TA_Handler ticker fetch failed for {symbol} (attempt {attempt + 1}/2): {exc}",
+                file=sys.stderr,
+            )
+            if attempt == 0:
+                time.sleep(0.35)
+    return None
+
+
+def fetch_market_ticker() -> list[dict[str, Any]]:
+    """Fetch cached technical ticker data for all KSE-100 constituents."""
+    global _MARKET_TICKER_CACHE
+
+    now = time.time()
+    if (
+        _MARKET_TICKER_CACHE is not None
+        and now - _MARKET_TICKER_CACHE[1] < _MARKET_TICKER_CACHE_TTL_SECONDS
+    ):
+        return _MARKET_TICKER_CACHE[0]
+    stale_cache = _MARKET_TICKER_CACHE[0] if _MARKET_TICKER_CACHE is not None else []
+
+    symbol_list = _load_kse100_symbols()
+    results: dict[str, Any] = {}
+    symbol_chunks = _chunked(symbol_list, 20)
+    deadline = time.time() + _MARKET_TICKER_FETCH_BUDGET_SECONDS
+    for chunk_index, chunk in enumerate(symbol_chunks):
+        if time.time() > deadline:
+            print("Market ticker fetch budget exceeded; returning partial snapshot.", file=sys.stderr)
+            break
+        chunk_tv_symbols = [f"PSX:{symbol}" for symbol in chunk]
+        chunk_results: dict[str, Any] | None = None
+        for attempt in range(1):
+            try:
+                chunk_results = get_multiple_analysis(
+                    screener="pakistan",
+                    interval=Interval.INTERVAL_1_DAY,
+                    symbols=chunk_tv_symbols,
+                )
+                break
+            except Exception as exc:
+                print(
+                    f"Market ticker chunk {chunk_index + 1}/{len(symbol_chunks)} "
+                    f"attempt {attempt + 1} failed: {exc}",
+                    file=sys.stderr,
+                )
+        if chunk_results:
+            results.update(chunk_results)
+
+    parsed_by_symbol: dict[str, dict[str, Any]] = {}
+    for symbol in symbol_list:
+        symbol_key = f"PSX:{symbol}"
+        try:
+            analysis = (results or {}).get(symbol_key)
+            if analysis is None:
+                raise KeyError(f"No data returned for {symbol_key}")
+            parsed_by_symbol[symbol] = _parse_ticker_indicators(analysis.indicators or {})
+        except Exception as exc:
+            print(f"Market ticker parse error for {symbol}: {exc}", file=sys.stderr)
+
+    # Per-symbol recovery is capped to avoid rate-limit storms.
+    missing_symbols = [
+        symbol
+        for symbol in symbol_list
+        if symbol not in parsed_by_symbol or parsed_by_symbol[symbol].get("close") is None
+    ]
+    for symbol in missing_symbols[:5]:
+        if time.time() > deadline:
+            break
+        recovered = _fetch_symbol_ticker_with_handler(symbol)
+        if recovered is not None:
+            parsed_by_symbol[symbol] = recovered
+
+    rows: list[dict[str, Any]] = []
+    for symbol in symbol_list:
+        indicator_data = parsed_by_symbol.get(symbol, {})
+        rows.append(_build_ticker_row(symbol, indicator_data))
+
+    valid_price_count = sum(1 for row in rows if row["current_price"] > 0)
+    if valid_price_count == 0:
+        if stale_cache:
+            print(
+                "Market ticker fetch returned zero valid prices; serving previous cached snapshot.",
+                file=sys.stderr,
+            )
+            return stale_cache
+        print(
+            "Market ticker fetch returned zero valid prices and no prior cache is available.",
+            file=sys.stderr,
+        )
+
+    _MARKET_TICKER_CACHE = (rows, now)
+    return rows
 
 
 _PSX_SYMBOLS_CACHE: list[dict[str, str]] | None = None
@@ -1402,6 +1635,98 @@ def scrape_psx_board_meetings(limit: int = 10) -> list[dict[str, str]]:
     except Exception as exc:
         print(f"Failed to parse PSX announcements: {exc}", file=sys.stderr)
         return []
+
+
+def _is_on_or_after_today(event_date: date, today: date | None = None) -> bool:
+    today = today or datetime.now(PKT).date()
+    return event_date >= today
+
+
+def _to_iso_date(raw: str) -> str | None:
+    parsed = parse_psx_date(raw)
+    if parsed:
+        return parsed.isoformat()
+    dates = parse_psx_date_range(raw)
+    if dates:
+        return dates[0].isoformat()
+    return None
+
+
+def _future_book_closure_date(book_closure_raw: str, today: date) -> date | None:
+    dates = parse_psx_date_range(book_closure_raw)
+    future_dates = [event_date for event_date in dates if _is_on_or_after_today(event_date, today)]
+    if not future_dates:
+        return None
+    return min(future_dates)
+
+
+_DIVIDEND_CALENDAR_CACHE: tuple[list[dict[str, str]], float] | None = None
+_DIVIDEND_CALENDAR_CACHE_TTL_SECONDS = 600
+
+
+def fetch_dividend_calendar() -> list[dict[str, str]]:
+    """Return upcoming dividend and board-meeting events from today onwards."""
+    global _DIVIDEND_CALENDAR_CACHE
+
+    now = time.time()
+    if (
+        _DIVIDEND_CALENDAR_CACHE is not None
+        and now - _DIVIDEND_CALENDAR_CACHE[1] < _DIVIDEND_CALENDAR_CACHE_TTL_SECONDS
+    ):
+        return _DIVIDEND_CALENDAR_CACHE[0]
+
+    today = datetime.now(PKT).date()
+    payouts = scrape_psx_payouts(limit=50)
+    board_meetings = scrape_psx_board_meetings(limit=50)
+
+    events: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    for item in payouts:
+        symbol = str(item.get("symbol", "")).strip().upper()
+        if not symbol or symbol == "N/A":
+            continue
+
+        closure_date = _future_book_closure_date(item.get("book_closure", ""), today)
+        if closure_date is None:
+            continue
+
+        details = str(item.get("dividend", "")).strip() or "Dividend announcement"
+        event = {
+            "symbol": symbol,
+            "event_type": "Dividend",
+            "details": details,
+            "date": closure_date.isoformat(),
+        }
+        key = (event["symbol"], event["event_type"], event["date"], event["details"])
+        if key not in seen:
+            seen.add(key)
+            events.append(event)
+
+    for item in board_meetings:
+        symbol = str(item.get("symbol", "")).strip().upper()
+        if not symbol or symbol == "N/A":
+            continue
+
+        meeting_date = parse_psx_date(item.get("date", ""))
+        if meeting_date is None or not _is_on_or_after_today(meeting_date, today):
+            continue
+
+        details = str(item.get("title", "")).strip() or "Board Meeting"
+        event = {
+            "symbol": symbol,
+            "event_type": "Board Meeting",
+            "details": details,
+            "date": meeting_date.isoformat(),
+        }
+        key = (event["symbol"], event["event_type"], event["date"], event["details"])
+        if key not in seen:
+            seen.add(key)
+            events.append(event)
+
+    events.sort(key=lambda row: (row["date"], row["symbol"], row["event_type"]))
+    _DIVIDEND_CALENDAR_CACHE = (events, now)
+    return events
 
 
 def _prioritize_by_portfolio(

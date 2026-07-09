@@ -12,7 +12,9 @@ from service import (
     analyze_portfolio,
     analyze_single_stock,
     generate_top_picks,
+    get_dividend_calendar,
     get_market_index,
+    get_market_ticker,
     get_news,
     get_symbol_suggestions,
 )
@@ -119,6 +121,22 @@ class SingleStockAnalyzeResponse(BaseModel):
     action: str
 
 
+class MarketTickerItem(BaseModel):
+    symbol: str
+    current_price: float
+    high: float
+    low: float
+    change: float
+    direction: str
+
+
+class DividendCalendarItem(BaseModel):
+    symbol: str
+    event_type: str
+    details: str
+    date: str
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -133,6 +151,8 @@ def analyze_portfolio_endpoint(request: PortfolioRequest) -> AnalyzePortfolioRes
     except ValueError as exc:
         message = str(exc)
         if "GEMINI_API_KEY" in message:
+            raise HTTPException(status_code=503, detail=message) from exc
+        if "temporarily unavailable" in message.lower():
             raise HTTPException(status_code=503, detail=message) from exc
         raise HTTPException(status_code=400, detail=message) from exc
     except Exception as exc:
@@ -182,6 +202,28 @@ def market_index_endpoint() -> MarketIndexResponse:
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch market index.",
+        ) from exc
+
+
+@app.get("/market_ticker", response_model=list[MarketTickerItem])
+def market_ticker_endpoint() -> list[MarketTickerItem]:
+    try:
+        return [MarketTickerItem(**item) for item in get_market_ticker()]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch market ticker data.",
+        ) from exc
+
+
+@app.get("/dividend_calendar", response_model=list[DividendCalendarItem])
+def dividend_calendar_endpoint() -> list[DividendCalendarItem]:
+    try:
+        return [DividendCalendarItem(**item) for item in get_dividend_calendar()]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch dividend calendar.",
         ) from exc
 
 

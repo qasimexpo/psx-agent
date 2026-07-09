@@ -77,7 +77,25 @@ export type SingleStockAnalyzeResult = {
   action: string;
 };
 
+export type MarketTickerItem = {
+  symbol: string;
+  current_price: number;
+  high: number;
+  low: number;
+  change: number;
+  direction: "UP" | "DOWN";
+};
+
+export type DividendCalendarItem = {
+  symbol: string;
+  event_type: string;
+  details: string;
+  date: string;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const DEFAULT_TIMEOUT_MS = 15000;
+const TICKER_TIMEOUT_MS = 8000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
   try {
@@ -96,14 +114,25 @@ async function parseErrorResponse(res: Response): Promise<string> {
   return `Request failed with status ${res.status}.`;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  options?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, options);
-  } catch {
+    res = await fetch(`${API_URL}${path}`, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Request timed out while waiting for live market data.");
+    }
     throw new Error(
       `Cannot reach the analysis server. Make sure the FastAPI backend is running at ${API_URL}.`,
     );
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!res.ok) {
@@ -163,4 +192,12 @@ export async function analyzeSingleStock(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ symbol }),
   });
+}
+
+export async function fetchMarketTicker(): Promise<MarketTickerItem[]> {
+  return apiFetch<MarketTickerItem[]>("/market_ticker", undefined, TICKER_TIMEOUT_MS);
+}
+
+export async function fetchDividendCalendar(): Promise<DividendCalendarItem[]> {
+  return apiFetch<DividendCalendarItem[]>("/dividend_calendar");
 }

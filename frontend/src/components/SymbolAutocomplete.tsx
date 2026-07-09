@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { searchSymbols, type SymbolSuggestion } from "@/lib/api";
 
 type SymbolAutocompleteProps = {
@@ -28,13 +28,17 @@ export default function SymbolAutocomplete({
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [dismissed, setDismissed] = useState(false);
+  const excludeSymbolsKey = useMemo(
+    () => excludeSymbols.map((s) => s.toUpperCase()).sort().join("|"),
+    [excludeSymbols],
+  );
 
   useEffect(() => {
     const query = value.trim();
     if (dismissed || query.length < 1) {
-      setSuggestions([]);
-      setOpen(false);
-      setActiveIndex(-1);
+      setSuggestions((prev) => (prev.length > 0 ? [] : prev));
+      setOpen((prev) => (prev ? false : prev));
+      setActiveIndex((prev) => (prev !== -1 ? -1 : prev));
       return;
     }
 
@@ -45,7 +49,7 @@ export default function SymbolAutocomplete({
         const results = await searchSymbols(query);
         if (requestId !== requestIdRef.current) return;
 
-        const excluded = new Set(excludeSymbols.map((s) => s.toUpperCase()));
+        const excluded = new Set(excludeSymbolsKey.split("|").filter(Boolean));
         const filtered = results.filter((item) => !excluded.has(item.symbol));
         setSuggestions(filtered);
         setOpen(filtered.length > 0);
@@ -63,7 +67,7 @@ export default function SymbolAutocomplete({
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [value, excludeSymbols, dismissed]);
+  }, [value, excludeSymbolsKey, dismissed]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -5,6 +5,7 @@ import { getAdsenseClientId } from "@/lib/adsense";
 import "./globals.css";
 
 const adsenseClient = getAdsenseClientId();
+const googleAnalyticsId = "G-835C87WVVW";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -63,16 +64,29 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${dmSans.variable} h-full scroll-smooth`}>
-      <body className="min-h-full flex flex-col font-sans antialiased">
+      <head>
         {adsenseClient && (
-          <Script
-            id="adsense-script"
+          <script
             async
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
             crossOrigin="anonymous"
-            strategy="afterInteractive"
           />
         )}
+      </head>
+      <body className="min-h-full flex flex-col font-sans antialiased">
+        <Script
+          id="gtag-src"
+          src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`}
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${googleAnalyticsId}');
+          `}
+        </Script>
         {children}
       </body>
     </html>
