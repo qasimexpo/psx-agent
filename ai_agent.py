@@ -40,16 +40,19 @@ The html_email MUST include these sections with clear headings:
    - If any sector > 40%, a prominent "⚠️ RISK WARNING" banner
 
 1. Portfolio Action Plan — HTML table with EXACTLY these columns in order:
-   Symbol | Qty | Buy Price | Current Price | P/L (PKR) | P/E Ratio & EPS | Holding Period | Action | Target Exit Price | Upcoming Events
-   - P/E Ratio & EPS: combine as "12.08 / EPS 14.71" or "N/A"
-   - Holding Period: e.g. "412 days — Long-Term (>1 Yr)" or "N/A"
-   - Action: Hold, Buy More, Sell 50%, Exit, Monitor, etc.
-   - Target Exit Price: specific numeric price using R1/S1 (e.g. "Sell at 245.00", "Cut loss below 216.00")
-   - Upcoming Events: from portfolio_events_text; use "-" if none
-   - Include EVERY symbol from the technical data — do not skip any row.
+   Symbol | Current Price | P/L (PKR) | Action | Qty to Sell | Target Buy Zone | Exit Target
+   - Current Price: use provided live market data only (no invented values).
+   - Action MUST be exactly one of: Buy More, Hold, Sell Partial, Sell All.
+   - Qty to Sell: only populate for Sell Partial (e.g. "Sell 50%"), otherwise "-".
+   - Target Buy Zone: only populate for Buy More (specific numeric price range), otherwise "-".
+   - Exit Target: provide an exact numeric target for taking profit/cutting loss.
+   - Include EVERY symbol from technical data — do not skip any row.
 
 2. Top 5 Shariah-Compliant Picks — HTML table with columns:
-   Ticker | Thesis | Suggested Buy Price | Risk Note
+   Ticker | Thesis | Current Price | Suggested Buy Price | Exit Target | Risk Note
+   - STRICT PRICE RULE: DO NOT hallucinate or guess current stock prices.
+   - If a recommended stock is NOT in provided portfolio/live data, write "Check Market" in Current Price.
+   - For non-portfolio picks, write Buy/Exit targets as percentages (e.g. "Buy on 5% dip", "Target +15%"), not fake numeric prices.
 
 3. Dividends & Board Meetings — display the scraped PSX data provided (or state if unavailable)
 
@@ -422,10 +425,16 @@ Return ONLY a JSON object with two keys:
 Rules:
 - Greet {client_name} by name at the start of html_email.
 - Analyze ONLY this client's portfolio — not any other client.
-- Portfolio Action Plan must have all 10 columns and every portfolio symbol.
+- Portfolio Action Plan must use exactly 7 columns in this order:
+  Symbol | Current Price | P/L (PKR) | Action | Qty to Sell | Target Buy Zone | Exit Target.
+- Action must be one of: Buy More, Hold, Sell Partial, Sell All.
+- Qty to Sell only for Sell Partial; otherwise "-".
+- Target Buy Zone only for Buy More; otherwise "-".
 - Use provided totals, Qty, P/L (PKR), P/E, EPS, and Holding Period verbatim.
 - Show ⚠️ RISK WARNING banner if any sector exceeds 40%.
-- Target Exit Price must reference R1/S1 from the technical data.
+- Current Price must use provided live data only (never invent values).
+- For Top 5 picks: never hallucinate current price. If not in provided live data, write "Check Market".
+- For such non-portfolio picks, Buy/Exit targets must be percentage-based (e.g., "Buy on 5% dip", "Target +15%").
 - telegram_summary: address {client_name}, total P/L, risk warnings, top 2-3 actionable alerts."""
 
     system_prompt = _build_system_prompt(client_name)
@@ -552,13 +561,16 @@ Rules:
 The report_html MUST include these three sections with clear headings:
 
 1. Daily Top 5 Picks — HTML table with columns:
-   Ticker | Thesis | Suggested Buy Price | Risk Note
+   Ticker | Thesis | Current Price | Suggested Buy Price | Exit Target | Risk Note
 
 2. Weekly Top 5 Picks — HTML table with the same columns.
 
 3. Monthly Top 5 Picks — HTML table with the same columns.
 
 Each section must contain exactly 5 rows. Use professional, institutional tone.
+- STRICT PRICE RULE: DO NOT hallucinate or guess current stock prices.
+- If a recommended stock is not in provided live/portfolio data, set Current Price to "Check Market".
+- For non-portfolio picks, express suggested buy/exit as percentages (e.g., "Buy on 5% dip", "Target +15%"), not fake numeric prices.
 """
 
 
@@ -779,7 +791,11 @@ Return a JSON object with:
 Each pick object must include:
 symbol, sector, summary, why, outlook_short, outlook_long, buy_zone, current_price, exit_target
 
-Base picks on news headlines and PSX market trends. Label as AI suggestions, not fatwas."""
+Base picks on news headlines and PSX market trends. Label as AI suggestions, not fatwas.
+STRICT PRICE RULE:
+- DO NOT hallucinate or guess current stock prices.
+- If a symbol is not in provided live/portfolio data, set current_price to "Check Market".
+- For such symbols, use percentage-style buy/exit targets (e.g., "Buy on 5% dip", "Target +15%")."""
 
     models_to_try = [model_name, *FALLBACK_MODELS]
     seen: set[str] = set()

@@ -49,6 +49,8 @@ function PickSkeleton() {
 
 function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
   const isTop = rank === 1;
+  const currentPrice = pick.current_price?.trim() || "Check Market";
+  const isMarketText = /check market/i.test(currentPrice);
 
   return (
     <article
@@ -82,7 +84,9 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Current Price
           </p>
-          <p className="mt-1 text-sm font-bold text-[#0B132B]">{pick.current_price}</p>
+          <p className={`mt-1 text-sm font-bold ${isMarketText ? "text-slate-600" : "text-[#0B132B]"}`}>
+            {currentPrice}
+          </p>
         </div>
         <div className="bg-white px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">

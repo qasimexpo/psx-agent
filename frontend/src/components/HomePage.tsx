@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import AnalysisProgressModal from "@/components/AnalysisProgressModal";
+import GoogleAd from "@/components/GoogleAd";
 import Hero from "@/components/Hero";
 import MarketIndexBar from "@/components/MarketIndexBar";
 import NewsSection from "@/components/NewsSection";
@@ -11,6 +12,7 @@ import TopPicks from "@/components/TopPicks";
 import type { AnalyzeResult } from "@/lib/api";
 
 export default function HomePage() {
+  const topSlot = process.env.NEXT_PUBLIC_ADSENSE_SLOT_TOP;
   const [report, setReport] = useState<AnalyzeResult | null>(null);
   const [showProgress, setShowProgress] = useState(false);
   const [analyzeSymbols, setAnalyzeSymbols] = useState<string[]>([]);
@@ -72,7 +74,12 @@ export default function HomePage() {
         onLoadingChange={handleLoadingChange}
         onError={handleAnalysisError}
       />
-      {report && !showProgress && <ReportView data={report} loading={false} />}
+      <section className="px-4 py-2 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <GoogleAd slot={topSlot} className="min-h-[90px]" />
+        </div>
+      </section>
+      <ReportView data={report} loading={showProgress} />
       <TopPicks />
       <NewsSection />
 

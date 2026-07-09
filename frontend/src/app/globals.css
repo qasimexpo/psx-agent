@@ -114,6 +114,7 @@ body {
 
 .report-content table {
   width: 100%;
+  min-width: 980px;
   border-collapse: collapse;
   margin: 1rem 0;
   font-size: 0.8125rem;
@@ -124,6 +125,17 @@ body {
   padding: 0.5rem 0.75rem;
   border: 1px solid #e2e8f0;
   text-align: left;
+}
+
+.report-content td:nth-child(2),
+.report-content td:nth-child(3),
+.report-content td:nth-child(5),
+.report-content td:nth-child(7),
+.report-content th:nth-child(2),
+.report-content th:nth-child(3),
+.report-content th:nth-child(5),
+.report-content th:nth-child(7) {
+  white-space: nowrap;
 }
 
 .report-content th {

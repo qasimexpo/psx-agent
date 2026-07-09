@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
 import type { AnalyzeResult } from "@/lib/api";
 import { exportReportToPdf } from "@/lib/exportPdf";
 import { IMAGES } from "@/lib/images";
@@ -45,17 +45,15 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
       <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold text-[#0B132B]">Your AI Portfolio Report</h2>
-          {data && !loading && (
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={exporting}
-              className="glow-button inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              {exporting ? "Generating PDF..." : "Download Report as PDF"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || !data || loading}
+            className="glow-button inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            {exporting ? "Generating PDF..." : "📥 Download Report as PDF"}
+          </button>
         </div>
 
         <div
@@ -63,13 +61,33 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
           className="report-container min-h-[200px] rounded-2xl border border-slate-200 p-6 shadow-lg sm:p-8"
         >
           {loading && (
+            <div className="py-10">
+              <div className="mb-6 flex items-center justify-center gap-3 text-center">
+                <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                <p className="text-base font-semibold text-[#0B132B]">
+                  AI is crunching the numbers. Please wait...
+                </p>
+              </div>
+              <div className="space-y-4">
+                <div className="h-6 w-1/3 animate-pulse rounded-md bg-slate-200" />
+                <div className="h-12 w-full animate-pulse rounded-md bg-slate-200" />
+                <div className="h-12 w-full animate-pulse rounded-md bg-slate-200" />
+                <div className="h-24 w-full animate-pulse rounded-xl bg-slate-100" />
+              </div>
+            </div>
+          )}
+
+          {!loading && !data && (
             <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-              <Loader2 className="h-10 w-10 animate-spin text-emerald-500" />
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <Bot className="h-8 w-8 text-emerald-600" />
+              </div>
               <p className="text-lg font-semibold text-[#0B132B]">
-                AI is analyzing market data...
+                Your AI-generated portfolio audit will appear here.
               </p>
-              <p className="text-sm text-slate-500">
-                Fetching live PSX prices and generating your report
+              <p className="max-w-lg text-sm text-slate-500">
+                Add your holdings above and click Generate AI Report to get actionable
+                recommendations, risk insights, and downloadable results.
               </p>
             </div>
           )}
@@ -94,7 +112,7 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] border-collapse text-sm">
+                <table className="w-full min-w-[980px] border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-[#0B132B]">
                       <th className="px-3 py-2.5">Symbol</th>
@@ -112,11 +130,11 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
                         <td className="px-3 py-2.5 font-semibold text-[#0B132B]">
                           {row.symbol}
                         </td>
-                        <td className="px-3 py-2.5">{row.quantity.toLocaleString()}</td>
-                        <td className="px-3 py-2.5">{formatPrice(row.buy_price)}</td>
-                        <td className="px-3 py-2.5">{formatPrice(row.live_price)}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5">{row.quantity.toLocaleString()}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5">{formatPrice(row.buy_price)}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5">{formatPrice(row.live_price)}</td>
                         <td
-                          className={`px-3 py-2.5 font-medium ${
+                          className={`whitespace-nowrap px-3 py-2.5 font-medium ${
                             row.pl_pkr !== null && row.pl_pkr >= 0
                               ? "text-emerald-600"
                               : row.pl_pkr !== null
@@ -126,7 +144,7 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
                         >
                           {formatPl(row.pl_pkr)}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="whitespace-nowrap px-3 py-2.5">
                           {row.rsi !== null ? row.rsi.toFixed(2) : "N/A"}
                         </td>
                         <td className="px-3 py-2.5">{row.ai_action}</td>
