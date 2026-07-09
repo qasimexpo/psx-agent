@@ -68,6 +68,15 @@ export type SymbolSuggestion = {
   sector: string;
 };
 
+export type SingleStockAnalyzeResult = {
+  symbol: string;
+  current_price: string;
+  target_price: string;
+  weightage_recommendation: string;
+  future_outlook: string;
+  action: string;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function parseErrorResponse(res: Response): Promise<string> {
@@ -144,4 +153,14 @@ export async function searchSymbols(
     `/symbols?${params.toString()}`,
   );
   return data.results;
+}
+
+export async function analyzeSingleStock(
+  symbol: string,
+): Promise<SingleStockAnalyzeResult> {
+  return apiFetch<SingleStockAnalyzeResult>("/analyze_single_stock", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol }),
+  });
 }

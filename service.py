@@ -12,17 +12,22 @@ from dotenv import load_dotenv
 from ai_agent import (
     build_holdings_from_rows,
     build_risk_summary,
+    generate_single_stock_deep_dive,
     generate_portfolio_html,
-    generate_top_picks_structured,
+    generate_top_picks_with_live_prices,
+    select_top_pick_symbols,
 )
 from fetchers import (
     build_client_report_data,
     build_market_data_cache,
     fetch_kse100_index,
+    fetch_live_prices_for_symbols,
+    fetch_market_indicators,
     fetch_news_feeds,
     fetch_pakistan_news,
     format_news_for_prompt,
     format_portfolio_summary_for_prompt,
+    normalize_psx_symbols,
     search_psx_symbols,
     shares_to_portfolio,
 )
@@ -93,18 +98,33 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def generate_top_picks() -> dict[str, Any]:
-    """Fetch PSX news and return structured top picks data."""
+    """Generate top picks using symbol-selection -> live price -> final AI pass."""
     config = load_api_config()
-
+    report_date = _report_date()
     news = fetch_pakistan_news(limit=10)
     news_text = format_news_for_prompt(news)
-
-    return generate_top_picks_structured(
+    symbols = select_top_pick_symbols(
         api_key=config["gemini_api_key"],
         model_name=config["model_name"],
-        report_date=_report_date(),
+        report_date=report_date,
+        news_text=news_text,
+    )
+    cleaned_symbols = normalize_psx_symbols(symbols)
+    if len(cleaned_symbols) < 5:
+        raise ValueError("Top picks symbol selection returned fewer than 5 valid symbols.")
+
+    cleaned_symbols = cleaned_symbols[:5]
+    live_prices_raw = fetch_live_prices_for_symbols(cleaned_symbols)
+    live_prices = {symbol: live_prices_raw.get(symbol) for symbol in cleaned_symbols}
+
+    return generate_top_picks_with_live_prices(
+        api_key=config["gemini_api_key"],
+        model_name=config["model_name"],
+        report_date=report_date,
         news=news,
         news_text=news_text,
+        recommended_symbols=cleaned_symbols,
+        live_prices=live_prices,
     )
 
 
@@ -121,3 +141,40 @@ def get_market_index() -> dict[str, Any]:
 def get_symbol_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
     """Return PSX symbol autocomplete suggestions."""
     return search_psx_symbols(query, limit=limit)
+
+
+def analyze_single_stock(symbol: str) -> dict[str, str]:
+    """
+    Analyze a single PSX stock with strict two-step flow:
+    1) fetch exact live TA data
+    2) pass live data to Gemini for structured deep-dive
+    """
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise ValueError("Symbol is required.")
+
+    config = load_api_config()
+    market = fetch_live_prices_for_symbols([normalized_symbol]).get(normalized_symbol)
+    indicators = fetch_market_indicators({normalized_symbol}).get(normalized_symbol, {})
+    if market is None and indicators.get("current_price") is None:
+        raise ValueError(f"Could not fetch live market data for symbol: {normalized_symbol}")
+
+    current_price = market if market is not None else indicators.get("current_price")
+    rsi = indicators.get("rsi")
+    support_1 = indicators.get("s1")
+    resistance_1 = indicators.get("r1")
+
+    news = fetch_pakistan_news(limit=3)
+    news_text = format_news_for_prompt(news)
+
+    return generate_single_stock_deep_dive(
+        api_key=config["gemini_api_key"],
+        model_name=config["model_name"],
+        report_date=_report_date(),
+        symbol=normalized_symbol,
+        current_price=current_price,
+        rsi=rsi,
+        support_1=support_1,
+        resistance_1=resistance_1,
+        news_text=news_text,
+    )

@@ -84,7 +84,7 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Current Price
           </p>
-          <p className={`mt-1 text-sm font-bold ${isMarketText ? "text-slate-600" : "text-[#0B132B]"}`}>
+          <p className={`mt-1 whitespace-nowrap text-sm font-bold ${isMarketText ? "text-slate-600" : "text-[#0B132B]"}`}>
             {currentPrice}
           </p>
         </div>
@@ -92,13 +92,13 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Target Buy Zone
           </p>
-          <p className="mt-1 text-sm font-bold text-emerald-700">{pick.buy_zone}</p>
+          <p className="mt-1 whitespace-nowrap text-sm font-bold text-emerald-700">{pick.buy_zone}</p>
         </div>
         <div className="bg-white px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Exit Target
           </p>
-          <p className="mt-1 text-sm font-bold text-[#0B132B]">{pick.exit_target}</p>
+          <p className="mt-1 whitespace-nowrap text-sm font-bold text-[#0B132B]">{pick.exit_target}</p>
         </div>
       </div>
     </article>

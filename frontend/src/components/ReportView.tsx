@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Bot, ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
+import WhatsAppCta from "@/components/WhatsAppCta";
 import type { AnalyzeResult } from "@/lib/api";
 import { exportReportToPdf } from "@/lib/exportPdf";
 import { IMAGES } from "@/lib/images";
@@ -161,6 +162,10 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
                 </pre>
               </div>
 
+              <div className="mt-6">
+                <WhatsAppCta />
+              </div>
+
               <p className="mt-6 border-t border-slate-200 pt-4 text-center text-xs text-slate-400">
                 SmartSarmaya.com | AI PSX Portfolio Auditor
               </p>
@@ -185,7 +190,9 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
 
             {showFullReport && (
               <div className="report-content mt-4 rounded-2xl border border-slate-200 bg-white p-6">
-                <div dangerouslySetInnerHTML={{ __html: data.report_html }} />
+                <div className="report-html-wrap overflow-x-auto">
+                  <div dangerouslySetInnerHTML={{ __html: data.report_html }} />
+                </div>
               </div>
             )}
           </div>

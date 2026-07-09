@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-from tradingview_ta import Interval, get_multiple_analysis
+from tradingview_ta import Interval, TA_Handler, get_multiple_analysis
 
 PAKISTAN_NEWS_URL = (
     "https://news.google.com/rss/search?"
@@ -416,6 +416,135 @@ def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
             }
 
     return indicators
+
+
+_LIVE_PRICE_CACHE: dict[str, tuple[float | None, float]] = {}
+_LIVE_PRICE_CACHE_TTL_SECONDS = 120
+_LIVE_PRICE_FAILURE_CACHE_TTL_SECONDS = 20
+
+
+def normalize_psx_symbol(value: Any) -> str:
+    """Normalize model/user symbol text into uppercase PSX ticker."""
+    text = str(value).strip()
+    text = text.strip("\"'`")
+    text = re.sub(r"\s+", "", text)
+    text = text.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", text):
+        return ""
+    return text
+
+
+def normalize_psx_symbols(values: list[Any]) -> list[str]:
+    """Normalize and de-duplicate PSX symbols while preserving order."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        symbol = normalize_psx_symbol(raw)
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        normalized.append(symbol)
+    return normalized
+
+
+def _fetch_symbol_live_price_with_handler(symbol: str) -> float | None:
+    """Fetch one symbol using TA_Handler with symbol-level retry."""
+    for attempt in range(2):
+        try:
+            handler = TA_Handler(
+                symbol=symbol,
+                screener="pakistan",
+                exchange="PSX",
+                interval=Interval.INTERVAL_1_DAY,
+            )
+            analysis = handler.get_analysis()
+            close = (analysis.indicators or {}).get("close")
+            if close is None:
+                raise ValueError(f"Missing close price in TA_Handler response for {symbol}")
+            return float(close)
+        except Exception as exc:
+            print(
+                f"TA_Handler get_analysis failed for {symbol} (attempt {attempt + 1}/2): {exc}",
+                file=sys.stderr,
+            )
+            if attempt == 0:
+                time.sleep(0.35)
+    return None
+
+
+def fetch_live_prices_for_symbols(
+    symbols: list[str],
+    *,
+    cache_ttl_seconds: int = _LIVE_PRICE_CACHE_TTL_SECONDS,
+) -> dict[str, float | None]:
+    """Fetch latest close prices for arbitrary PSX symbols with short TTL cache."""
+    normalized = normalize_psx_symbols(symbols)
+    if not normalized:
+        return {}
+
+    now = time.time()
+    prices: dict[str, float | None] = {}
+    uncached: list[str] = []
+
+    for symbol in normalized:
+        cached = _LIVE_PRICE_CACHE.get(symbol)
+        if cached and now - cached[1] < cache_ttl_seconds:
+            prices[symbol] = cached[0]
+        else:
+            uncached.append(symbol)
+
+    if uncached:
+        tv_symbols = [f"PSX:{symbol}" for symbol in uncached]
+        results: dict[str, Any] | None = None
+        for attempt in range(2):
+            try:
+                results = get_multiple_analysis(
+                    screener="pakistan",
+                    interval=Interval.INTERVAL_1_DAY,
+                    symbols=tv_symbols,
+                )
+                break
+            except Exception as exc:
+                print(
+                    f"Live price fetch attempt {attempt + 1} failed: {exc}",
+                    file=sys.stderr,
+                )
+                if attempt == 0:
+                    time.sleep(0.4)
+
+        for symbol in uncached:
+            close_price: float | None = None
+            try:
+                analysis = (results or {}).get(f"PSX:{symbol}")
+                if analysis and analysis.indicators:
+                    close = analysis.indicators.get("close")
+                    if close is not None:
+                        close_price = float(close)
+            except Exception as exc:
+                print(f"Live price parse error for {symbol}: {exc}", file=sys.stderr)
+
+            prices[symbol] = close_price
+            if close_price is not None:
+                _LIVE_PRICE_CACHE[symbol] = (close_price, now)
+
+    missing_symbols = [symbol for symbol in normalized if prices.get(symbol) is None]
+    for symbol in missing_symbols:
+        recovered = _fetch_symbol_live_price_with_handler(symbol)
+        prices[symbol] = recovered
+        if recovered is not None:
+            _LIVE_PRICE_CACHE[symbol] = (recovered, now)
+        else:
+            # Keep failures short-lived so transient TradingView outages can recover quickly.
+            _LIVE_PRICE_CACHE[symbol] = (
+                None,
+                now - max(0, (cache_ttl_seconds - _LIVE_PRICE_FAILURE_CACHE_TTL_SECONDS)),
+            )
+
+    # Preserve original symbol order in returned map.
+    ordered: dict[str, float | None] = {}
+    for symbol in normalized:
+        ordered[symbol] = prices.get(symbol)
+    return ordered
 
 
 _PSX_SYMBOLS_CACHE: list[dict[str, str]] | None = None

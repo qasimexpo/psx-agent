@@ -7,6 +7,7 @@ import Hero from "@/components/Hero";
 import MarketIndexBar from "@/components/MarketIndexBar";
 import NewsSection from "@/components/NewsSection";
 import PortfolioForm from "@/components/PortfolioForm";
+import QuickStockAnalyzer from "@/components/QuickStockAnalyzer";
 import ReportView from "@/components/ReportView";
 import TopPicks from "@/components/TopPicks";
 import type { AnalyzeResult } from "@/lib/api";
@@ -81,6 +82,7 @@ export default function HomePage() {
       </section>
       <ReportView data={report} loading={showProgress} />
       <TopPicks />
+      <QuickStockAnalyzer />
       <NewsSection />
 
       <AnalysisProgressModal

@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Plus, Trash2 } from "lucide-react";
 import SymbolAutocomplete from "@/components/SymbolAutocomplete";
+import WhatsAppCta from "@/components/WhatsAppCta";
 import { analyzePortfolio, type AnalyzeResult, type Share } from "@/lib/api";
 
 type ShareRow = {
@@ -193,6 +194,7 @@ export default function PortfolioForm({
                 )}
               </button>
             </div>
+            <WhatsAppCta />
           </form>
         </div>
       </div>

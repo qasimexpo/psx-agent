@@ -10,7 +10,7 @@ from typing import Any
 
 import google.generativeai as genai
 
-from fetchers import _format_pkr
+from fetchers import _format_pkr, normalize_psx_symbol
 
 FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash")
 
@@ -698,6 +698,47 @@ Rules:
 - Use professional, institutional tone.
 """
 
+
+TOP_PICK_SYMBOL_SELECTION_SYSTEM_PROMPT = """You are a PSX equity research analyst.
+
+Task:
+- Analyze provided PSX news headlines and return ONLY 5 PSX ticker symbols as JSON.
+
+Output rules:
+- Output ONLY a JSON object with key "symbols".
+- "symbols" must be an array of exactly 5 uppercase PSX tickers.
+- Do not include explanations, markdown, or code fences.
+"""
+
+
+TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT = """You are a PSX equity research analyst producing Shariah-compliant stock picks for the Pakistan Stock Exchange.
+
+Rules:
+- Output ONLY a valid JSON object with keys: "report_html", "daily_picks", "monthly_picks", "yearly_picks".
+- Use the provided recommended symbols and exact live prices.
+- You MUST use the provided exact live prices in current_price. Do NOT hallucinate, estimate, or alter prices.
+- For each pick, Target Buy Zone and Exit Target must be numeric PKR values derived from the provided current price.
+- You MUST NEVER write "Cannot be determined", "N/A", "Unknown", or similar non-actionable placeholders for buy_zone or exit_target.
+- If current price is missing for a symbol, still provide estimated Target Buy Zone and Exit Target from historical PSX context and trend logic.
+- report_html must include Daily, Monthly, and Yearly Top 5 sections as HTML tables.
+- Each picks array must contain exactly 5 objects for its horizon.
+- Use professional institutional tone and clearly label as AI suggestions (not fatwas).
+"""
+
+
+SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT = """You are a PSX single-stock analyst producing a concise institutional deep-dive.
+
+Rules:
+- Output ONLY valid JSON with keys:
+  "symbol", "current_price", "target_price", "weightage_recommendation", "future_outlook", "action".
+- Use the provided live market data exactly for current_price.
+- NEVER hallucinate or guess prices.
+- target_price must be derived from provided Resistance 1 and risk context.
+- weightage_recommendation must be a percentage string (example: "8% - 12%").
+- future_outlook must be 2-3 sentences grounded in provided PSX context/news.
+- action must be one of: STRONG BUY, BUY, HOLD, SELL.
+"""
+
 _PICK_ITEM_SCHEMA = {
     "type": "OBJECT",
     "properties": {
@@ -725,7 +766,48 @@ _PICK_ITEM_SCHEMA = {
 }
 
 
+def _parse_top_pick_symbols_json(raw: str) -> list[str]:
+    text = _strip_markdown_fences(raw)
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("Symbol selection response is not an object")
+    symbols_raw = data.get("symbols")
+    if not isinstance(symbols_raw, list):
+        raise ValueError("Missing symbols array")
+
+    symbols: list[str] = []
+    for item in symbols_raw:
+        symbol = normalize_psx_symbol(item)
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
+        if len(symbols) == 5:
+            break
+
+    if len(symbols) < 5:
+        raise ValueError("Model returned fewer than 5 valid symbols")
+    return symbols
+
+
 def _normalize_pick_item(item: dict[str, Any]) -> dict[str, str]:
+    def _is_forbidden_target(value: str) -> bool:
+        normalized = value.strip().lower()
+        return normalized in {
+            "",
+            "n/a",
+            "na",
+            "unknown",
+            "cannot be determined",
+            "cannot determine",
+            "not available",
+        }
+
+    buy_zone = str(item.get("buy_zone", "")).strip()
+    exit_target = str(item.get("exit_target", "")).strip()
+    if _is_forbidden_target(buy_zone):
+        buy_zone = "Buy on 5% dip from latest market price"
+    if _is_forbidden_target(exit_target):
+        exit_target = "Target +12% from latest market price"
+
     return {
         "symbol": str(item.get("symbol", "")).strip().upper(),
         "sector": str(item.get("sector", "Unknown")).strip() or "Unknown",
@@ -733,9 +815,9 @@ def _normalize_pick_item(item: dict[str, Any]) -> dict[str, str]:
         "why": str(item.get("why", "")).strip(),
         "outlook_short": str(item.get("outlook_short", "")).strip(),
         "outlook_long": str(item.get("outlook_long", "")).strip(),
-        "buy_zone": str(item.get("buy_zone", "")).strip(),
+        "buy_zone": buy_zone,
         "current_price": str(item.get("current_price", "N/A")).strip() or "N/A",
-        "exit_target": str(item.get("exit_target", "N/A")).strip() or "N/A",
+        "exit_target": exit_target,
     }
 
 
@@ -859,3 +941,289 @@ STRICT PRICE RULE:
         "monthly_picks": [],
         "yearly_picks": [],
     }
+
+
+def select_top_pick_symbols(
+    api_key: str,
+    model_name: str,
+    report_date: str,
+    news_text: str,
+) -> list[str]:
+    """Select top 5 symbols from news context."""
+    user_prompt = f"""Select exactly 5 PSX ticker symbols for top picks.
+
+Report Date (PKT): {report_date}
+
+=== NEWS HEADLINES ===
+{news_text}
+
+Return JSON only:
+{{"symbols": ["EFERT", "MARI", "SYS", "MEBL", "HUBC"]}}"""
+
+    models_to_try = [model_name, *FALLBACK_MODELS]
+    seen: set[str] = set()
+
+    for candidate in models_to_try:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(
+                model_name=candidate,
+                system_instruction=TOP_PICK_SYMBOL_SELECTION_SYSTEM_PROMPT,
+            )
+            response = model.generate_content(
+                user_prompt,
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 2048,
+                    "response_mime_type": "application/json",
+                    "response_schema": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "symbols": {
+                                "type": "ARRAY",
+                                "items": {"type": "STRING"},
+                            }
+                        },
+                        "required": ["symbols"],
+                    },
+                },
+            )
+            return _parse_top_pick_symbols_json(response.text or "")
+        except Exception as exc:
+            print(f"Symbol selection model {candidate} failed: {exc}", file=sys.stderr)
+
+    raise RuntimeError("Failed to select top pick symbols from AI model.")
+
+
+def generate_top_picks_with_live_prices(
+    api_key: str,
+    model_name: str,
+    report_date: str,
+    news: list[dict[str, str]],
+    news_text: str,
+    recommended_symbols: list[str],
+    live_prices: dict[str, float | None],
+) -> dict[str, Any]:
+    """Generate final top picks report from selected symbols and exact fetched prices."""
+    symbols_text = "\n".join(
+        f"- {symbol}: {f'{live_prices[symbol]:.2f} PKR' if live_prices.get(symbol) is not None else 'N/A'}"
+        for symbol in recommended_symbols
+    )
+
+    user_prompt = f"""Generate today's PSX Top 5 Picks report from provided symbols and exact live prices.
+
+Report Date (PKT): {report_date}
+
+=== NEWS HEADLINES ===
+{news_text}
+
+=== RECOMMENDED STOCKS WITH EXACT LIVE PRICES ===
+{symbols_text}
+
+Return a JSON object with:
+1. "report_html" — full HTML with Daily, Monthly, and Yearly Top 5 table sections
+2. "daily_picks" — array of exactly 5 objects
+3. "monthly_picks" — array of exactly 5 objects
+4. "yearly_picks" — array of exactly 5 objects
+
+Each pick object must include:
+symbol, sector, summary, why, outlook_short, outlook_long, buy_zone, current_price, exit_target
+
+Use ONLY the provided symbols and exact live prices for current_price, and produce numeric PKR buy/exit targets.
+
+Mandatory output rules:
+- Never write "Cannot be determined" for buy_zone or exit_target.
+- If current price is missing for any symbol, still provide estimated buy_zone and exit_target using historical/contextual PSX reasoning.
+- Keep targets clear and actionable."""
+
+    models_to_try = [model_name, *FALLBACK_MODELS]
+    seen: set[str] = set()
+
+    for candidate in models_to_try:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(
+                model_name=candidate,
+                system_instruction=TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT,
+            )
+            response = model.generate_content(
+                user_prompt,
+                generation_config={
+                    "temperature": 0.3,
+                    "max_output_tokens": 16384,
+                    "response_mime_type": "application/json",
+                    "response_schema": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "report_html": {"type": "STRING"},
+                            "daily_picks": {
+                                "type": "ARRAY",
+                                "items": _PICK_ITEM_SCHEMA,
+                            },
+                            "monthly_picks": {
+                                "type": "ARRAY",
+                                "items": _PICK_ITEM_SCHEMA,
+                            },
+                            "yearly_picks": {
+                                "type": "ARRAY",
+                                "items": _PICK_ITEM_SCHEMA,
+                            },
+                        },
+                        "required": [
+                            "report_html",
+                            "daily_picks",
+                            "monthly_picks",
+                            "yearly_picks",
+                        ],
+                    },
+                },
+            )
+            return _parse_top_picks_structured(response.text or "")
+        except Exception as exc:
+            print(
+                f"Top picks with live prices model {candidate} failed: {exc}",
+                file=sys.stderr,
+            )
+
+    print("All top-picks models failed. Using fallback top picks template.", file=sys.stderr)
+    return {
+        "report_html": _build_fallback_top_picks_html(report_date, news),
+        "daily_picks": [],
+        "monthly_picks": [],
+        "yearly_picks": [],
+    }
+
+
+def generate_single_stock_deep_dive(
+    *,
+    api_key: str,
+    model_name: str,
+    report_date: str,
+    symbol: str,
+    current_price: float | None,
+    rsi: float | None,
+    support_1: float | None,
+    resistance_1: float | None,
+    news_text: str,
+) -> dict[str, str]:
+    """Generate a strict JSON deep-dive for one stock using provided live data."""
+    if current_price is None:
+        raise ValueError(f"Unable to fetch live current price for symbol: {symbol}")
+
+    fallback_target = resistance_1 if resistance_1 is not None else current_price * 1.08
+    fallback_action = "HOLD"
+    if resistance_1 is not None and current_price < resistance_1 * 0.95:
+        fallback_action = "BUY"
+    if support_1 is not None and current_price < support_1:
+        fallback_action = "SELL"
+
+    fallback = {
+        "symbol": symbol,
+        "current_price": f"{current_price:.2f}",
+        "target_price": f"{fallback_target:.2f}",
+        "weightage_recommendation": "5% - 10%",
+        "future_outlook": (
+            "Momentum and risk should be monitored against current PSX volatility and "
+            "company-specific disclosures. The stock remains sensitive to market sentiment, "
+            "so position sizing discipline is important."
+        ),
+        "action": fallback_action,
+    }
+
+    user_prompt = f"""Prepare a Single Stock Deep Dive JSON.
+
+Report Date (PKT): {report_date}
+
+=== STOCK ===
+Symbol: {symbol}
+Current Price (LIVE, EXACT): {current_price:.2f}
+RSI: {"N/A" if rsi is None else f"{rsi:.2f}"}
+Support 1 (S1): {"N/A" if support_1 is None else f"{support_1:.2f}"}
+Resistance 1 (R1): {"N/A" if resistance_1 is None else f"{resistance_1:.2f}"}
+
+=== NEWS HEADLINES ===
+{news_text}
+
+Requirements:
+- Keep current_price exactly as provided live value.
+- target_price should be a short-term exit/profit target based primarily on R1.
+- weightage_recommendation must be suitable for risk/volatility.
+- future_outlook must be 2-3 sentences.
+- action must be one of: STRONG BUY, BUY, HOLD, SELL."""
+
+    models_to_try = [model_name, *FALLBACK_MODELS]
+    seen: set[str] = set()
+
+    for candidate in models_to_try:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(
+                model_name=candidate,
+                system_instruction=SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT,
+            )
+            response = model.generate_content(
+                user_prompt,
+                generation_config={
+                    "temperature": 0.25,
+                    "max_output_tokens": 2048,
+                    "response_mime_type": "application/json",
+                    "response_schema": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "symbol": {"type": "STRING"},
+                            "current_price": {"type": "STRING"},
+                            "target_price": {"type": "STRING"},
+                            "weightage_recommendation": {"type": "STRING"},
+                            "future_outlook": {"type": "STRING"},
+                            "action": {"type": "STRING"},
+                        },
+                        "required": [
+                            "symbol",
+                            "current_price",
+                            "target_price",
+                            "weightage_recommendation",
+                            "future_outlook",
+                            "action",
+                        ],
+                    },
+                },
+            )
+            parsed = json.loads(_strip_markdown_fences(response.text or ""))
+            if not isinstance(parsed, dict):
+                raise ValueError("Single stock response is not a JSON object")
+
+            action = str(parsed.get("action", "")).strip().upper()
+            if action not in {"STRONG BUY", "BUY", "HOLD", "SELL"}:
+                action = fallback["action"]
+
+            return {
+                "symbol": str(parsed.get("symbol", symbol)).strip().upper() or symbol,
+                # Enforce exact fetched live price in final payload.
+                "current_price": f"{current_price:.2f}",
+                "target_price": str(parsed.get("target_price", fallback["target_price"])).strip()
+                or fallback["target_price"],
+                "weightage_recommendation": str(
+                    parsed.get(
+                        "weightage_recommendation",
+                        fallback["weightage_recommendation"],
+                    )
+                ).strip()
+                or fallback["weightage_recommendation"],
+                "future_outlook": str(parsed.get("future_outlook", fallback["future_outlook"])).strip()
+                or fallback["future_outlook"],
+                "action": action,
+            }
+        except Exception as exc:
+            print(f"Single-stock model {candidate} failed: {exc}", file=sys.stderr)
+
+    print("All single-stock models failed. Using fallback deep-dive.", file=sys.stderr)
+    return fallback

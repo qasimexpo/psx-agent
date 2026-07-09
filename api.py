@@ -8,7 +8,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from service import analyze_portfolio, generate_top_picks, get_market_index, get_news, get_symbol_suggestions
+from service import (
+    analyze_portfolio,
+    analyze_single_stock,
+    generate_top_picks,
+    get_market_index,
+    get_news,
+    get_symbol_suggestions,
+)
 
 app = FastAPI(title="SmartSarmaya API", version="1.0.0")
 
@@ -99,6 +106,19 @@ class SymbolSearchResponse(BaseModel):
     results: list[SymbolSuggestion]
 
 
+class SingleStockRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+
+
+class SingleStockAnalyzeResponse(BaseModel):
+    symbol: str
+    current_price: str
+    target_price: str
+    weightage_recommendation: str
+    future_outlook: str
+    action: str
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -177,4 +197,21 @@ def symbols_endpoint(q: str = "", limit: int = 8) -> SymbolSearchResponse:
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch symbol suggestions.",
+        ) from exc
+
+
+@app.post("/analyze_single_stock", response_model=SingleStockAnalyzeResponse)
+def analyze_single_stock_endpoint(request: SingleStockRequest) -> SingleStockAnalyzeResponse:
+    try:
+        result = analyze_single_stock(request.symbol)
+        return SingleStockAnalyzeResponse(**result)
+    except ValueError as exc:
+        message = str(exc)
+        if "GEMINI_API_KEY" in message:
+            raise HTTPException(status_code=503, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to analyze single stock.",
         ) from exc

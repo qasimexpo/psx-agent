@@ -120,6 +120,12 @@ body {
   font-size: 0.8125rem;
 }
 
+.report-html-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .report-content th,
 .report-content td {
   padding: 0.5rem 0.75rem;
@@ -141,4 +147,15 @@ body {
 .report-content th {
   background: #f1f5f9;
   font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .report-content {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .report-content table {
+    min-width: 1024px;
+  }
 }
