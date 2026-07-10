@@ -16,6 +16,9 @@ const TABS: { key: PickHorizon; label: string }[] = [
   { key: "yearly", label: "Yearly" },
 ];
 
+const PICKS_GRID_CLASS =
+  "mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5";
+
 function getPicksForHorizon(result: TopPicksResult, horizon: PickHorizon): PickCard[] {
   const structured =
     horizon === "daily"
@@ -30,18 +33,31 @@ function getPicksForHorizon(result: TopPicksResult, horizon: PickHorizon): PickC
   return parsePicksFromHtml(result.report_html, horizon);
 }
 
+function formatPickPrice(value: string): string {
+  const trimmed = value?.trim() || "";
+  if (!trimmed || /^(n\/a|na|check market)$/i.test(trimmed)) {
+    return "N/A";
+  }
+  const numeric = Number(trimmed.replace(/,/g, "").replace(/[^\d.-]/g, ""));
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return "N/A";
+  }
+  return `${numeric.toFixed(2)} PKR`;
+}
+
 function PickSkeleton() {
   return (
-    <div className="pick-card-premium w-72 shrink-0 animate-pulse sm:w-auto">
-      <div className="h-12 bg-[#0B132B]/80" />
-      <div className="space-y-3 p-4">
-        <div className="h-3 w-3/4 rounded bg-slate-200" />
-        <div className="h-3 w-full rounded bg-slate-200" />
-        <div className="grid grid-cols-3 gap-2 pt-2">
-          <div className="h-10 rounded bg-slate-100" />
-          <div className="h-10 rounded bg-slate-100" />
-          <div className="h-10 rounded bg-slate-100" />
-        </div>
+    <div className="pick-card-premium flex min-h-[350px] flex-col">
+      <div className="h-12 shrink-0 animate-pulse bg-[#0B132B]/80" />
+      <div className="flex flex-1 flex-col space-y-3 border-b border-slate-100 px-4 py-3">
+        <div className="h-3 w-3/4 animate-pulse rounded bg-slate-200" />
+        <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+        <div className="h-3 w-5/6 animate-pulse rounded bg-slate-200" />
+      </div>
+      <div className="mt-auto grid grid-cols-1 gap-px bg-slate-100 sm:grid-cols-3">
+        <div className="h-14 animate-pulse bg-slate-100" />
+        <div className="h-14 animate-pulse bg-slate-100" />
+        <div className="h-14 animate-pulse bg-slate-100" />
       </div>
     </div>
   );
@@ -49,14 +65,14 @@ function PickSkeleton() {
 
 function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
   const isTop = rank === 1;
-  const currentPrice = pick.current_price?.trim() || "Check Market";
-  const isMarketText = /check market/i.test(currentPrice);
+  const currentPrice = formatPickPrice(pick.current_price);
+  const isMarketText = currentPrice === "N/A";
 
   return (
     <article
-      className={`pick-card-premium w-72 shrink-0 sm:w-auto ${isTop ? "pick-card-premium-top" : ""}`}
+      className={`pick-card-premium flex min-h-[350px] flex-col ${isTop ? "pick-card-premium-top" : ""}`}
     >
-      <div className="flex items-center justify-between bg-[#0B132B] px-4 py-3 text-white">
+      <div className="flex shrink-0 items-center justify-between bg-[#0B132B] px-4 py-3 text-white">
         <div className="flex items-center gap-3">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
             #{rank}
@@ -64,27 +80,29 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
           <h3 className="text-lg font-bold tracking-tight">{pick.symbol}</h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
+          <span className="max-w-[7rem] truncate rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
             {pick.sector}
           </span>
-          <TrendingUp className="h-4 w-4 text-emerald-400" />
+          <TrendingUp className="h-4 w-4 shrink-0 text-emerald-400" />
         </div>
       </div>
 
-      <div className="border-b border-slate-100 px-4 py-3">
-        <p className="line-clamp-1 text-sm text-slate-600">{pick.summary}</p>
-        <p className="mt-1.5 line-clamp-2 text-sm text-slate-500">
+      <div className="flex flex-1 flex-col border-b border-slate-100 px-4 py-3">
+        <p className="line-clamp-3 text-sm text-slate-600">{pick.summary}</p>
+        <p className="mt-1.5 line-clamp-3 text-sm text-slate-500">
           <span className="font-semibold text-[#0B132B]">Catalyst: </span>
           {pick.why}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-px bg-slate-100 sm:grid-cols-3">
+      <div className="mt-auto grid grid-cols-1 gap-px bg-slate-100 sm:grid-cols-3">
         <div className="bg-white px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Current Price
           </p>
-          <p className={`mt-1 whitespace-nowrap text-sm font-bold ${isMarketText ? "text-slate-600" : "text-[#0B132B]"}`}>
+          <p
+            className={`mt-1 line-clamp-2 text-sm font-bold leading-tight ${isMarketText ? "text-slate-600" : "text-[#0B132B]"}`}
+          >
             {currentPrice}
           </p>
         </div>
@@ -92,13 +110,17 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Target Buy Zone
           </p>
-          <p className="mt-1 whitespace-nowrap text-sm font-bold text-emerald-700">{pick.buy_zone}</p>
+          <p className="mt-1 line-clamp-2 text-sm font-bold leading-tight text-emerald-700">
+            {pick.buy_zone}
+          </p>
         </div>
         <div className="bg-white px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Exit Target
           </p>
-          <p className="mt-1 whitespace-nowrap text-sm font-bold text-[#0B132B]">{pick.exit_target}</p>
+          <p className="mt-1 line-clamp-2 text-sm font-bold leading-tight text-[#0B132B]">
+            {pick.exit_target}
+          </p>
         </div>
       </div>
     </article>
@@ -107,7 +129,7 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
 
 export default function TopPicks() {
   const [result, setResult] = useState<TopPicksResult | null>(null);
-  const [activeTab, setActiveTab] = useState<PickHorizon>("monthly");
+  const [activeTab, setActiveTab] = useState<PickHorizon>("daily");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,6 +186,7 @@ export default function TopPicks() {
                   key={tab.key}
                   type="button"
                   onClick={() => setActiveTab(tab.key)}
+                  suppressHydrationWarning
                   className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
                     activeTab === tab.key
                       ? "bg-emerald-500 text-white shadow-md"
@@ -178,8 +201,8 @@ export default function TopPicks() {
         </div>
 
         {loading && (
-          <div className="mt-8 flex gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-visible">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className={PICKS_GRID_CLASS}>
+            {Array.from({ length: 5 }).map((_, i) => (
               <PickSkeleton key={i} />
             ))}
           </div>
@@ -200,10 +223,10 @@ export default function TopPicks() {
         )}
 
         {!loading && !error && picks.length > 0 && (
-          <div className="mt-8 flex gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-visible lg:gap-5">
+          <div className={PICKS_GRID_CLASS}>
             {picks.map((pick, index) => (
               <PremiumPickCard
-                key={`${activeTab}-${pick.symbol}`}
+                key={`${activeTab}-${pick.symbol}-${index}`}
                 pick={pick}
                 rank={index + 1}
               />

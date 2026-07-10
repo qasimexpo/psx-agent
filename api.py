@@ -208,7 +208,7 @@ def analyze_portfolio_endpoint(request: PortfolioRequest) -> AnalyzePortfolioRes
         return AnalyzePortfolioResponse(**result)
     except ValueError as exc:
         message = str(exc)
-        if "GEMINI_API_KEY" in message:
+        if "GROQ_API_KEY" in message:
             raise HTTPException(status_code=503, detail=message) from exc
         if "temporarily unavailable" in message.lower():
             raise HTTPException(status_code=503, detail=message) from exc
@@ -229,7 +229,7 @@ def top_picks_endpoint() -> TopPicksResponse:
         return TopPicksResponse(**result)
     except ValueError as exc:
         message = str(exc)
-        if "GEMINI_API_KEY" in message:
+        if "GROQ_API_KEY" in message:
             raise HTTPException(status_code=503, detail=message) from exc
         logger.warning("top_picks validation error: %s", message)
         raise HTTPException(status_code=400, detail=message) from exc
@@ -316,7 +316,7 @@ def analyze_single_stock_endpoint(request: SingleStockRequest) -> SingleStockAna
         return SingleStockAnalyzeResponse(**result)
     except ValueError as exc:
         message = str(exc)
-        if "GEMINI_API_KEY" in message:
+        if "GROQ_API_KEY" in message:
             raise HTTPException(status_code=503, detail=message) from exc
         logger.warning("analyze_single_stock validation error: %s", message)
         raise HTTPException(status_code=400, detail=message) from exc

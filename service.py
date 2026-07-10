@@ -2,6 +2,7 @@
 Stateless orchestration for the PSX FastAPI backend.
 """
 
+import logging
 import os
 from datetime import datetime
 from typing import Any
@@ -10,12 +11,19 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from ai_agent import (
+    SINGLE_STOCK_CACHE_TTL_SECONDS,
+    TOP_PICKS_CACHE_KEY,
+    TOP_PICKS_CACHE_TTL_SECONDS,
+    apply_live_prices_to_top_picks_result,
     build_holdings_from_rows,
     build_risk_summary,
-    generate_single_stock_deep_dive,
+    collect_symbols_from_top_picks_result,
     generate_portfolio_html,
+    generate_single_stock_deep_dive,
     generate_top_picks_with_live_prices,
+    get_ai_cached,
     select_top_pick_symbols,
+    set_ai_cached,
 )
 from fetchers import (
     build_client_report_data,
@@ -27,6 +35,7 @@ from fetchers import (
     fetch_market_ticker,
     fetch_news_feeds,
     fetch_pakistan_news,
+    fetch_psx_kse100_quote_map,
     format_news_for_prompt,
     format_portfolio_summary_for_prompt,
     normalize_psx_symbols,
@@ -34,21 +43,28 @@ from fetchers import (
     shares_to_portfolio,
 )
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "llama-3.1-8b-instant"
 PKT = ZoneInfo("Asia/Karachi")
+logger = logging.getLogger("smartsarmaya.service")
+TOP_PICKS_FALLBACK_SYMBOLS = ["OGDC", "PPL", "LUCK", "HUBC", "MEBL"]
 
 
-def load_api_config() -> dict[str, str]:
+def load_api_config() -> dict[str, str | None]:
     """Load API credentials from environment variables."""
     load_dotenv()
 
-    gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    model_name = os.getenv("AI_MODEL_NAME", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    groq_api_key = (os.environ.get("GROQ_API_KEY") or "").strip()
+    gemini_api_key = (os.environ.get("GEMINI_API_KEY") or "").strip() or None
+    model_name = (os.environ.get("AI_MODEL_NAME") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    telegram_bot_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 
-    if not gemini_api_key:
-        raise ValueError("Missing required environment variable: GEMINI_API_KEY")
+    if not groq_api_key:
+        raise ValueError("Missing required environment variable: GROQ_API_KEY")
+    if not telegram_bot_token:
+        logger.warning("TELEGRAM_BOT_TOKEN is not set (optional for API endpoints).")
 
     return {
+        "groq_api_key": groq_api_key,
         "gemini_api_key": gemini_api_key,
         "model_name": model_name,
     }
@@ -58,10 +74,36 @@ def _report_date() -> str:
     return datetime.now(PKT).strftime("%A, %d %B %Y")
 
 
+def _resolve_live_prices_for_symbols(symbols: list[str]) -> dict[str, float | None]:
+    """Fetch live PSX prices with TradingView + per-symbol PSX + KSE-100 bulk fallback."""
+    if not symbols:
+        return {}
+    prices = fetch_live_prices_for_symbols(symbols)
+    kse100_quotes = fetch_psx_kse100_quote_map()
+    for symbol in symbols:
+        if prices.get(symbol) is not None:
+            continue
+        quote = kse100_quotes.get(symbol)
+        if quote and quote.get("current", 0) > 0:
+            prices[symbol] = float(quote["current"])
+    return prices
+
+
+def _refresh_top_picks_live_prices(result: dict[str, Any]) -> dict[str, Any]:
+    """Re-apply fresh PSX prices to all pick horizons."""
+    symbols = collect_symbols_from_top_picks_result(result)
+    if not symbols:
+        return result
+    try:
+        live_prices = _resolve_live_prices_for_symbols(symbols)
+    except Exception as exc:
+        logger.warning("Failed to refresh top-picks live prices: %s", exc)
+        return result
+    return apply_live_prices_to_top_picks_result(result, live_prices)
+
+
 def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
-    """
-    Fetch market data for the given shares and return structured AI report data.
-    """
+    """Fetch market data for the given shares and return structured AI report data."""
     config = load_api_config()
     portfolio = shares_to_portfolio(shares)
     if not portfolio:
@@ -79,7 +121,7 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
     news_text = format_news_for_prompt(news)
 
     report_html = generate_portfolio_html(
-        api_key=config["gemini_api_key"],
+        groq_api_key=config["groq_api_key"],
         model_name=config["model_name"],
         report_date=report_date,
         technical_text=technical_text,
@@ -89,6 +131,7 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
         news=news,
         news_text=news_text,
         psx_events=client_psx_events,
+        gemini_api_key=config["gemini_api_key"],
     )
 
     return {
@@ -101,33 +144,58 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
 
 def generate_top_picks() -> dict[str, Any]:
     """Generate top picks using symbol-selection -> live price -> final AI pass."""
+    cached = get_ai_cached(TOP_PICKS_CACHE_KEY, TOP_PICKS_CACHE_TTL_SECONDS)
+    if cached is not None:
+        logger.info("Serving top picks from AI cache (%s).", TOP_PICKS_CACHE_KEY)
+        return _refresh_top_picks_live_prices(cached)
+
     config = load_api_config()
     report_date = _report_date()
     news = fetch_pakistan_news(limit=10)
     news_text = format_news_for_prompt(news)
-    symbols = select_top_pick_symbols(
-        api_key=config["gemini_api_key"],
-        model_name=config["model_name"],
-        report_date=report_date,
-        news_text=news_text,
-    )
+    try:
+        symbols = select_top_pick_symbols(
+            groq_api_key=config["groq_api_key"],
+            model_name=config["model_name"],
+            report_date=report_date,
+            news_text=news_text,
+            gemini_api_key=config["gemini_api_key"],
+        )
+    except Exception as exc:
+        logger.exception("Top-picks symbol selection failed: %s", exc)
+        symbols = TOP_PICKS_FALLBACK_SYMBOLS.copy()
+        logger.warning("Using fallback top-pick symbols due to AI quota/error: %s", symbols)
+    logger.info("AI symbol selection raw result: %s", symbols)
     cleaned_symbols = normalize_psx_symbols(symbols)
     if len(cleaned_symbols) < 5:
-        raise ValueError("Top picks symbol selection returned fewer than 5 valid symbols.")
+        logger.warning(
+            "Top-pick symbol selection produced fewer than 5 valid symbols: %s. "
+            "Falling back to defaults.",
+            cleaned_symbols,
+        )
+        cleaned_symbols = TOP_PICKS_FALLBACK_SYMBOLS.copy()
 
     cleaned_symbols = cleaned_symbols[:5]
-    live_prices_raw = fetch_live_prices_for_symbols(cleaned_symbols)
-    live_prices = {symbol: live_prices_raw.get(symbol) for symbol in cleaned_symbols}
+    try:
+        live_prices = _resolve_live_prices_for_symbols(cleaned_symbols)
+    except Exception as exc:
+        logger.exception("Top-picks live price fetch failed: %s", exc)
+        live_prices = {symbol: None for symbol in cleaned_symbols}
+    logger.info("Fetched Live Prices: %s", live_prices)
 
-    return generate_top_picks_with_live_prices(
-        api_key=config["gemini_api_key"],
+    result = generate_top_picks_with_live_prices(
+        groq_api_key=config["groq_api_key"],
         model_name=config["model_name"],
         report_date=report_date,
         news=news,
         news_text=news_text,
         recommended_symbols=cleaned_symbols,
         live_prices=live_prices,
+        gemini_api_key=config["gemini_api_key"],
     )
+    result = _refresh_top_picks_live_prices(result)
+    set_ai_cached(TOP_PICKS_CACHE_KEY, result)
+    return result
 
 
 def get_news() -> dict[str, list[dict[str, str]]]:
@@ -156,21 +224,22 @@ def get_symbol_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
 
 
 def analyze_single_stock(symbol: str) -> dict[str, str]:
-    """
-    Analyze a single PSX stock with strict two-step flow:
-    1) fetch exact live TA data
-    2) pass live data to Gemini for structured deep-dive
-    """
+    """Analyze a single PSX stock with live data and Groq structured deep-dive."""
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise ValueError("Symbol is required.")
+
+    cache_key = f"single_stock:{normalized_symbol}"
+    cached = get_ai_cached(cache_key, SINGLE_STOCK_CACHE_TTL_SECONDS)
+    if cached is not None:
+        logger.info("Serving single-stock analysis from AI cache (%s).", cache_key)
+        return cached
 
     config = load_api_config()
     market = fetch_live_prices_for_symbols([normalized_symbol]).get(normalized_symbol)
     indicators = fetch_market_indicators({normalized_symbol}).get(normalized_symbol, {})
     current_price = market if market is not None else indicators.get("current_price")
     if current_price is None:
-        # Fallback to the market ticker snapshot when direct quote endpoints are rate-limited.
         ticker_map = {row.get("symbol"): row for row in fetch_market_ticker()}
         ticker_row = ticker_map.get(normalized_symbol, {})
         ticker_price = ticker_row.get("current_price")
@@ -190,8 +259,8 @@ def analyze_single_stock(symbol: str) -> dict[str, str]:
     news = fetch_pakistan_news(limit=3)
     news_text = format_news_for_prompt(news)
 
-    return generate_single_stock_deep_dive(
-        api_key=config["gemini_api_key"],
+    result = generate_single_stock_deep_dive(
+        groq_api_key=config["groq_api_key"],
         model_name=config["model_name"],
         report_date=_report_date(),
         symbol=normalized_symbol,
@@ -200,4 +269,7 @@ def analyze_single_stock(symbol: str) -> dict[str, str]:
         support_1=support_1,
         resistance_1=resistance_1,
         news_text=news_text,
+        gemini_api_key=config["gemini_api_key"],
     )
+    set_ai_cached(cache_key, result)
+    return result

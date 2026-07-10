@@ -66,8 +66,10 @@ export default function SmartTicker() {
     }
 
     load();
+    const refreshTimer = window.setInterval(load, 5 * 60 * 1000);
     return () => {
       cancelled = true;
+      window.clearInterval(refreshTimer);
     };
   }, []);
 
@@ -96,8 +98,15 @@ export default function SmartTicker() {
   if (visibleRows.length === 0) {
     return (
       <section className="border-y border-gray-200 bg-slate-50 px-4 py-2 sm:px-6">
-        <div className="mx-auto max-w-6xl text-sm text-slate-600">
-          Live market ticker is temporarily unavailable. Please refresh shortly.
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-sm text-slate-600">
+          <span>Live market ticker is temporarily unavailable. Please refresh shortly.</span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Refresh
+          </button>
         </div>
       </section>
     );

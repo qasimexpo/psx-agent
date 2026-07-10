@@ -1,18 +1,171 @@
 """
-Gemini AI agent for generating PSX portfolio HTML reports and Telegram summaries.
+AI agent for generating PSX portfolio HTML reports and analysis via Groq (primary) and Gemini (fallback).
 """
 
 import json
+import logging
 import re
-import sys
+import time
 from html import escape
 from typing import Any
 
 import google.generativeai as genai
+from groq import Groq
 
-from fetchers import _format_pkr, normalize_psx_symbol
+from fetchers import (
+    _format_pkr,
+    fetch_live_prices_for_symbols,
+    fetch_psx_kse100_quote_map,
+    normalize_psx_symbol,
+)
 
-FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash")
+GROQ_FALLBACK_MODELS = ("llama-3.1-8b-instant", "llama-3.3-70b-versatile")
+GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash")
+GROQ_MODEL_ALIASES = {
+    "llama3-8b-8192": "llama-3.1-8b-instant",
+    "llama3-70b-8192": "llama-3.3-70b-versatile",
+}
+logger = logging.getLogger("smartsarmaya.ai")
+
+_AI_RESPONSE_CACHE: dict[str, tuple[Any, float]] = {}
+TOP_PICKS_CACHE_KEY = "top_picks_daily_v3"
+TOP_PICKS_CACHE_TTL_SECONDS = 6 * 60 * 60
+SINGLE_STOCK_CACHE_TTL_SECONDS = 20 * 60
+
+
+def get_ai_cached(key: str, ttl_seconds: int) -> Any | None:
+    """Return a cached AI response when still within TTL."""
+    entry = _AI_RESPONSE_CACHE.get(key)
+    if entry and time.time() - entry[1] < ttl_seconds:
+        return entry[0]
+    return None
+
+
+def set_ai_cached(key: str, value: Any) -> None:
+    """Store an AI response in the in-memory cache."""
+    _AI_RESPONSE_CACHE[key] = (value, time.time())
+
+
+def _ensure_groq_api_key(api_key: str) -> None:
+    if not str(api_key or "").strip():
+        raise ValueError("Missing required environment variable: GROQ_API_KEY")
+
+
+def _unique_models(primary: str, fallbacks: tuple[str, ...]) -> list[str]:
+    primary = GROQ_MODEL_ALIASES.get(primary.strip(), primary.strip())
+    seen: set[str] = set()
+    models: list[str] = []
+    for model in (primary, *fallbacks):
+        resolved = GROQ_MODEL_ALIASES.get(model, model)
+        if resolved and resolved not in seen:
+            seen.add(resolved)
+            models.append(resolved)
+    return models
+
+
+def _call_groq_chat(
+    *,
+    groq_api_key: str,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    client = Groq(api_key=groq_api_key)
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+def _call_gemini_chat(
+    *,
+    gemini_api_key: str,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    genai.configure(api_key=gemini_api_key)
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        system_instruction=system_prompt,
+    )
+    response = model.generate_content(
+        user_prompt,
+        generation_config={
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+            "response_mime_type": "application/json",
+        },
+    )
+    return (response.text or "").strip()
+
+
+def _call_llm_json(
+    *,
+    groq_api_key: str,
+    gemini_api_key: str | None,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Call Groq first, then optional Gemini fallback; return raw JSON text."""
+    _ensure_groq_api_key(groq_api_key)
+    full_user_prompt = f"{user_prompt.rstrip()}\n\nReturn ONLY raw JSON. No markdown fences."
+    errors: list[str] = []
+
+    for candidate in _unique_models(model_name, GROQ_FALLBACK_MODELS):
+        try:
+            text = _call_groq_chat(
+                groq_api_key=groq_api_key,
+                model_name=candidate,
+                system_prompt=system_prompt,
+                user_prompt=full_user_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            if text:
+                if candidate != model_name:
+                    logger.info(
+                        "Groq fallback model used: %s (configured: %s)",
+                        candidate,
+                        model_name,
+                    )
+                return text
+        except Exception as exc:
+            logger.exception("Groq model %s failed: %s", candidate, exc)
+            errors.append(f"Groq/{candidate}: {exc}")
+
+    if gemini_api_key:
+        for candidate in GEMINI_FALLBACK_MODELS:
+            try:
+                text = _call_gemini_chat(
+                    gemini_api_key=gemini_api_key,
+                    model_name=candidate,
+                    system_prompt=system_prompt,
+                    user_prompt=full_user_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                if text:
+                    logger.info("Gemini fallback model used: %s", candidate)
+                    return text
+            except Exception as exc:
+                logger.exception("Gemini model %s failed: %s", candidate, exc)
+                errors.append(f"Gemini/{candidate}: {exc}")
+
+    raise RuntimeError("All LLM providers failed: " + "; ".join(errors[:3]))
 
 SYSTEM_PROMPT_TEMPLATE = """You are the Chief Risk Officer (CRO) of an institutional PSX portfolio desk briefing client: {client_name}.
 
@@ -378,7 +531,7 @@ def _parse_report_json(raw: str) -> dict[str, str]:
 
 
 def generate_report(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     client_name: str,
     report_date: str,
@@ -389,6 +542,7 @@ def generate_report(
     news: list[dict[str, str]],
     news_text: str,
     psx_events: dict[str, Any],
+    gemini_api_key: str | None = None,
 ) -> dict[str, str]:
     """
     Generate HTML email and Telegram summary using Gemini.
@@ -439,46 +593,21 @@ Rules:
 
     system_prompt = _build_system_prompt(client_name)
 
-    models_to_try = [model_name, *FALLBACK_MODELS]
-    seen: set[str] = set()
+    try:
+        raw = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.4,
+            max_tokens=16384,
+        )
+        return _parse_report_json(raw)
+    except Exception as exc:
+        logger.exception("All LLM providers failed for portfolio report: %s", exc)
 
-    for candidate in models_to_try:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
-                model_name=candidate,
-                system_instruction=system_prompt,
-            )
-            response = model.generate_content(
-                user_prompt,
-                generation_config={
-                    "temperature": 0.4,
-                    "max_output_tokens": 16384,
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "html_email": {"type": "STRING"},
-                            "telegram_summary": {"type": "STRING"},
-                        },
-                        "required": ["html_email", "telegram_summary"],
-                    },
-                },
-            )
-            report = _parse_report_json(response.text or "")
-            if candidate != model_name:
-                print(
-                    f"  Used fallback model {candidate} (configured: {model_name}).",
-                    file=sys.stderr,
-                )
-            return report
-        except Exception as exc:
-            print(f"Gemini model {candidate} failed: {exc}", file=sys.stderr)
-
-    print("All Gemini models failed. Using fallback report template.", file=sys.stderr)
+    logger.warning("Using fallback portfolio report template.")
     return _build_fallback_report(
         client_name,
         report_date,
@@ -490,7 +619,7 @@ Rules:
 
 
 def generate_portfolio_html(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     technical_text: str,
@@ -501,10 +630,11 @@ def generate_portfolio_html(
     news_text: str,
     psx_events: dict[str, Any],
     client_name: str = "Investor",
+    gemini_api_key: str | None = None,
 ) -> str:
     """Generate portfolio analysis HTML for the API (no Telegram delivery)."""
     report = generate_report(
-        api_key=api_key,
+        groq_api_key=groq_api_key,
         model_name=model_name,
         client_name=client_name,
         report_date=report_date,
@@ -515,12 +645,13 @@ def generate_portfolio_html(
         news=news,
         news_text=news_text,
         psx_events=psx_events,
+        gemini_api_key=gemini_api_key,
     )
     return report["html_email"]
 
 
 def generate_report_html(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     technical_text: str,
@@ -529,13 +660,14 @@ def generate_report_html(
     news_text: str,
     psx_events: dict[str, Any],
     client_name: str = "Client",
+    gemini_api_key: str | None = None,
 ) -> str:
     """Backward-compatible wrapper returning only the HTML email body."""
     from fetchers import compute_portfolio_summary, format_portfolio_summary_for_prompt
 
     summary = compute_portfolio_summary(technical_rows)
     return generate_portfolio_html(
-        api_key=api_key,
+        groq_api_key=groq_api_key,
         model_name=model_name,
         report_date=report_date,
         technical_text=technical_text,
@@ -546,6 +678,7 @@ def generate_report_html(
         news_text=news_text,
         psx_events=psx_events,
         client_name=client_name,
+        gemini_api_key=gemini_api_key,
     )
 
 
@@ -622,13 +755,14 @@ def _parse_top_picks_json(raw: str) -> str:
 
 
 def generate_top_picks_html(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     news: list[dict[str, str]],
     news_text: str,
+    gemini_api_key: str | None = None,
 ) -> str:
-    """Generate Daily/Weekly/Monthly Top 5 Picks HTML using Gemini."""
+    """Generate Daily/Weekly/Monthly Top 5 Picks HTML using Groq."""
     user_prompt = f"""Generate today's PSX Top 5 Picks report.
 
 Report Date (PKT): {report_date}
@@ -645,45 +779,21 @@ Rules:
 - Base picks on the news headlines and current PSX market trends.
 - Label as AI investment suggestions, not religious rulings."""
 
-    models_to_try = [model_name, *FALLBACK_MODELS]
-    seen: set[str] = set()
+    try:
+        raw = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=TOP_PICKS_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.4,
+            max_tokens=16384,
+        )
+        return _parse_top_picks_json(raw)
+    except Exception as exc:
+        logger.exception("All LLM providers failed for top picks HTML: %s", exc)
 
-    for candidate in models_to_try:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
-                model_name=candidate,
-                system_instruction=TOP_PICKS_SYSTEM_PROMPT,
-            )
-            response = model.generate_content(
-                user_prompt,
-                generation_config={
-                    "temperature": 0.4,
-                    "max_output_tokens": 16384,
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "report_html": {"type": "STRING"},
-                        },
-                        "required": ["report_html"],
-                    },
-                },
-            )
-            report_html = _parse_top_picks_json(response.text or "")
-            if candidate != model_name:
-                print(
-                    f"  Used fallback model {candidate} (configured: {model_name}).",
-                    file=sys.stderr,
-                )
-            return report_html
-        except Exception as exc:
-            print(f"Gemini model {candidate} failed: {exc}", file=sys.stderr)
-
-    print("All Gemini models failed. Using fallback top picks template.", file=sys.stderr)
+    logger.warning("Using fallback top picks template.")
     return _build_fallback_top_picks_html(report_date, news)
 
 
@@ -715,13 +825,16 @@ TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT = """You are a PSX equity research anal
 
 Rules:
 - Output ONLY a valid JSON object with keys: "report_html", "daily_picks", "monthly_picks", "yearly_picks".
-- Use the provided recommended symbols and exact live prices.
-- You MUST use the provided exact live prices in current_price. Do NOT hallucinate, estimate, or alter prices.
-- For each pick, Target Buy Zone and Exit Target must be numeric PKR values derived from the provided current price.
-- You MUST NEVER write "Cannot be determined", "N/A", "Unknown", or similar non-actionable placeholders for buy_zone or exit_target.
-- If current price is missing for a symbol, still provide estimated Target Buy Zone and Exit Target from historical PSX context and trend logic.
+- daily_picks, monthly_picks, and yearly_picks must each contain exactly 5 objects using ONLY the 5 provided symbols (reorder per horizon is fine; no extra tickers).
+- CRITICAL: You MUST use the exact numerical values provided in the LIVE_PRICES_DATA dictionary for the current_price field.
+- DO NOT use your internal knowledge or historical data for prices.
+- If a symbol is in LIVE_PRICES_DATA, use that exact price for current_price.
+- If a symbol's price is missing or "N/A" in LIVE_PRICES_DATA, you MUST output "N/A" for current_price.
+- Under NO circumstances should you invent or estimate a current price.
+- For each pick, Target Buy Zone and Exit Target must be numeric PKR values derived from the provided current price when available.
+- You MUST NEVER write "Cannot be determined", "Unknown", or similar non-actionable placeholders for buy_zone or exit_target.
+- When current_price is "N/A", use percentage-style buy/exit targets (e.g., "Buy on 5% dip", "Target +12%").
 - report_html must include Daily, Monthly, and Yearly Top 5 sections as HTML tables.
-- Each picks array must contain exactly 5 objects for its horizon.
 - Use professional institutional tone and clearly label as AI suggestions (not fatwas).
 """
 
@@ -768,7 +881,11 @@ _PICK_ITEM_SCHEMA = {
 
 def _parse_top_pick_symbols_json(raw: str) -> list[str]:
     text = _strip_markdown_fences(raw)
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.error("Top-pick symbol JSON parse failed. Raw response: %s", text[:500])
+        raise ValueError("Symbol selection model returned invalid JSON") from exc
     if not isinstance(data, dict):
         raise ValueError("Symbol selection response is not an object")
     symbols_raw = data.get("symbols")
@@ -786,6 +903,97 @@ def _parse_top_pick_symbols_json(raw: str) -> list[str]:
     if len(symbols) < 5:
         raise ValueError("Model returned fewer than 5 valid symbols")
     return symbols
+
+
+def collect_symbols_from_top_picks_result(result: dict[str, Any]) -> list[str]:
+    """Collect unique symbols across daily, monthly, and yearly pick lists."""
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for key in ("daily_picks", "monthly_picks", "yearly_picks"):
+        for pick in result.get(key, []):
+            symbol = str(pick.get("symbol", "")).strip().upper()
+            if symbol and symbol not in seen:
+                seen.add(symbol)
+                symbols.append(symbol)
+    return symbols
+
+
+def _parse_pick_price(value: str) -> float | None:
+    """Parse a pick current_price string into a float, stripping PKR/commas."""
+    cleaned = re.sub(r"[^\d.\-]", "", str(value or "").replace(",", ""))
+    if not cleaned:
+        return None
+    try:
+        parsed = float(cleaned)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _expand_live_prices_for_result(
+    result: dict[str, Any],
+    live_prices: dict[str, float | None],
+) -> dict[str, float | None]:
+    """Merge live prices for all symbols appearing across pick horizons."""
+    expanded = dict(live_prices)
+    all_symbols = collect_symbols_from_top_picks_result(result)
+    missing = [symbol for symbol in all_symbols if expanded.get(symbol) is None]
+    if not missing:
+        return expanded
+
+    fetched = fetch_live_prices_for_symbols(missing)
+    kse100_quotes = fetch_psx_kse100_quote_map()
+    for symbol in missing:
+        if fetched.get(symbol) is not None:
+            expanded[symbol] = fetched[symbol]
+            continue
+        quote = kse100_quotes.get(symbol)
+        if quote and quote.get("current", 0) > 0:
+            expanded[symbol] = float(quote["current"])
+    return expanded
+
+
+def _enforce_live_prices_on_pick_list(
+    picks: list[dict[str, str]],
+    live_prices: dict[str, float | None],
+) -> list[dict[str, str]]:
+    """Overwrite AI prices with PSX live data; never keep hallucinated values."""
+    enforced: list[dict[str, str]] = []
+    for pick in picks:
+        updated = dict(pick)
+        symbol = str(pick.get("symbol", "")).strip().upper()
+        live = live_prices.get(symbol)
+        llm_price = _parse_pick_price(str(pick.get("current_price", "")))
+
+        if live is not None and live > 0:
+            if llm_price is not None and live > 0:
+                pct_diff = abs(llm_price - live) / live * 100
+                if pct_diff > 5:
+                    logger.warning(
+                        "LLM price hallucination for %s: llm=%s live=%.2f (diff=%.1f%%)",
+                        symbol,
+                        pick.get("current_price"),
+                        live,
+                        pct_diff,
+                    )
+            updated["current_price"] = f"{live:.2f}"
+        else:
+            updated["current_price"] = "N/A"
+        enforced.append(updated)
+    return enforced
+
+
+def apply_live_prices_to_top_picks_result(
+    result: dict[str, Any],
+    live_prices: dict[str, float | None],
+) -> dict[str, Any]:
+    """Ensure structured top-picks cards use authoritative live prices, not AI guesses."""
+    updated = dict(result)
+    for key in ("daily_picks", "monthly_picks", "yearly_picks"):
+        picks = updated.get(key)
+        if isinstance(picks, list) and picks:
+            updated[key] = _enforce_live_prices_on_pick_list(picks, live_prices)
+    return updated
 
 
 def _normalize_pick_item(item: dict[str, Any]) -> dict[str, str]:
@@ -850,11 +1058,12 @@ def _parse_top_picks_structured(raw: str) -> dict[str, Any]:
 
 
 def generate_top_picks_structured(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     news: list[dict[str, str]],
     news_text: str,
+    gemini_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Generate top picks HTML plus structured daily/monthly/yearly pick cards."""
     user_prompt = f"""Generate today's PSX Top 5 Picks report.
@@ -879,62 +1088,21 @@ STRICT PRICE RULE:
 - If a symbol is not in provided live/portfolio data, set current_price to "Check Market".
 - For such symbols, use percentage-style buy/exit targets (e.g., "Buy on 5% dip", "Target +15%")."""
 
-    models_to_try = [model_name, *FALLBACK_MODELS]
-    seen: set[str] = set()
+    try:
+        raw = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=TOP_PICKS_STRUCTURED_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.4,
+            max_tokens=16384,
+        )
+        return _parse_top_picks_structured(raw)
+    except Exception as exc:
+        logger.exception("All LLM providers failed for structured top picks: %s", exc)
 
-    for candidate in models_to_try:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
-                model_name=candidate,
-                system_instruction=TOP_PICKS_STRUCTURED_SYSTEM_PROMPT,
-            )
-            response = model.generate_content(
-                user_prompt,
-                generation_config={
-                    "temperature": 0.4,
-                    "max_output_tokens": 16384,
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "report_html": {"type": "STRING"},
-                            "daily_picks": {
-                                "type": "ARRAY",
-                                "items": _PICK_ITEM_SCHEMA,
-                            },
-                            "monthly_picks": {
-                                "type": "ARRAY",
-                                "items": _PICK_ITEM_SCHEMA,
-                            },
-                            "yearly_picks": {
-                                "type": "ARRAY",
-                                "items": _PICK_ITEM_SCHEMA,
-                            },
-                        },
-                        "required": [
-                            "report_html",
-                            "daily_picks",
-                            "monthly_picks",
-                            "yearly_picks",
-                        ],
-                    },
-                },
-            )
-            result = _parse_top_picks_structured(response.text or "")
-            if candidate != model_name:
-                print(
-                    f"  Used fallback model {candidate} (configured: {model_name}).",
-                    file=sys.stderr,
-                )
-            return result
-        except Exception as exc:
-            print(f"Gemini model {candidate} failed: {exc}", file=sys.stderr)
-
-    print("All Gemini models failed. Using fallback top picks template.", file=sys.stderr)
+    logger.warning("Using fallback top picks template.")
     return {
         "report_html": _build_fallback_top_picks_html(report_date, news),
         "daily_picks": [],
@@ -944,10 +1112,11 @@ STRICT PRICE RULE:
 
 
 def select_top_pick_symbols(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     news_text: str,
+    gemini_api_key: str | None = None,
 ) -> list[str]:
     """Select top 5 symbols from news context."""
     user_prompt = f"""Select exactly 5 PSX ticker symbols for top picks.
@@ -960,58 +1129,43 @@ Report Date (PKT): {report_date}
 Return JSON only:
 {{"symbols": ["EFERT", "MARI", "SYS", "MEBL", "HUBC"]}}"""
 
-    models_to_try = [model_name, *FALLBACK_MODELS]
-    seen: set[str] = set()
-
-    for candidate in models_to_try:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
-                model_name=candidate,
-                system_instruction=TOP_PICK_SYMBOL_SELECTION_SYSTEM_PROMPT,
-            )
-            response = model.generate_content(
-                user_prompt,
-                generation_config={
-                    "temperature": 0.2,
-                    "max_output_tokens": 2048,
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "symbols": {
-                                "type": "ARRAY",
-                                "items": {"type": "STRING"},
-                            }
-                        },
-                        "required": ["symbols"],
-                    },
-                },
-            )
-            return _parse_top_pick_symbols_json(response.text or "")
-        except Exception as exc:
-            print(f"Symbol selection model {candidate} failed: {exc}", file=sys.stderr)
-
-    raise RuntimeError("Failed to select top pick symbols from AI model.")
+    try:
+        raw_text = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=TOP_PICK_SYMBOL_SELECTION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.2,
+            max_tokens=2048,
+        )
+        return _parse_top_pick_symbols_json(raw_text)
+    except Exception as exc:
+        logger.exception("Symbol selection failed across all LLM providers: %s", exc)
+        raise RuntimeError("Failed to select top pick symbols from AI model.") from exc
 
 
 def generate_top_picks_with_live_prices(
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     news: list[dict[str, str]],
     news_text: str,
     recommended_symbols: list[str],
     live_prices: dict[str, float | None],
+    gemini_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Generate final top picks report from selected symbols and exact fetched prices."""
-    symbols_text = "\n".join(
-        f"- {symbol}: {f'{live_prices[symbol]:.2f} PKR' if live_prices.get(symbol) is not None else 'N/A'}"
+    live_prices_data = {
+        symbol: (
+            f"{live_prices[symbol]:.2f}"
+            if live_prices.get(symbol) is not None and live_prices[symbol] > 0
+            else "N/A"
+        )
         for symbol in recommended_symbols
-    )
+    }
+    live_prices_json = json.dumps(live_prices_data, indent=2)
+    symbols_list = ", ".join(recommended_symbols)
 
     user_prompt = f"""Generate today's PSX Top 5 Picks report from provided symbols and exact live prices.
 
@@ -1020,78 +1174,52 @@ Report Date (PKT): {report_date}
 === NEWS HEADLINES ===
 {news_text}
 
-=== RECOMMENDED STOCKS WITH EXACT LIVE PRICES ===
-{symbols_text}
+=== PROVIDED SYMBOLS (use ONLY these 5 in every horizon) ===
+{symbols_list}
+
+=== LIVE_PRICES_DATA (authoritative) ===
+{live_prices_json}
 
 Return a JSON object with:
 1. "report_html" — full HTML with Daily, Monthly, and Yearly Top 5 table sections
-2. "daily_picks" — array of exactly 5 objects
-3. "monthly_picks" — array of exactly 5 objects
-4. "yearly_picks" — array of exactly 5 objects
+2. "daily_picks" — array of exactly 5 objects (ONLY the 5 provided symbols)
+3. "monthly_picks" — array of exactly 5 objects (ONLY the 5 provided symbols)
+4. "yearly_picks" — array of exactly 5 objects (ONLY the 5 provided symbols)
 
 Each pick object must include:
 symbol, sector, summary, why, outlook_short, outlook_long, buy_zone, current_price, exit_target
 
-Use ONLY the provided symbols and exact live prices for current_price, and produce numeric PKR buy/exit targets.
+CRITICAL PRICE RULES:
+- Use LIVE_PRICES_DATA values exactly for current_price.
+- DO NOT use internal knowledge or historical prices.
+- If LIVE_PRICES_DATA shows "N/A" for a symbol, set current_price to "N/A".
+- Never invent or estimate a current price.
 
 Mandatory output rules:
 - Never write "Cannot be determined" for buy_zone or exit_target.
-- If current price is missing for any symbol, still provide estimated buy_zone and exit_target using historical/contextual PSX reasoning.
+- When current_price is "N/A", use percentage-style buy/exit targets.
 - Keep targets clear and actionable."""
 
-    models_to_try = [model_name, *FALLBACK_MODELS]
-    seen: set[str] = set()
+    try:
+        raw = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.3,
+            max_tokens=16384,
+        )
+        parsed = _parse_top_picks_structured(raw)
+        expanded_prices = _expand_live_prices_for_result(parsed, live_prices)
+        return apply_live_prices_to_top_picks_result(parsed, expanded_prices)
+    except Exception as exc:
+        logger.exception(
+            "All LLM providers failed for top picks with live prices: %s",
+            exc,
+        )
 
-    for candidate in models_to_try:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
-                model_name=candidate,
-                system_instruction=TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT,
-            )
-            response = model.generate_content(
-                user_prompt,
-                generation_config={
-                    "temperature": 0.3,
-                    "max_output_tokens": 16384,
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "report_html": {"type": "STRING"},
-                            "daily_picks": {
-                                "type": "ARRAY",
-                                "items": _PICK_ITEM_SCHEMA,
-                            },
-                            "monthly_picks": {
-                                "type": "ARRAY",
-                                "items": _PICK_ITEM_SCHEMA,
-                            },
-                            "yearly_picks": {
-                                "type": "ARRAY",
-                                "items": _PICK_ITEM_SCHEMA,
-                            },
-                        },
-                        "required": [
-                            "report_html",
-                            "daily_picks",
-                            "monthly_picks",
-                            "yearly_picks",
-                        ],
-                    },
-                },
-            )
-            return _parse_top_picks_structured(response.text or "")
-        except Exception as exc:
-            print(
-                f"Top picks with live prices model {candidate} failed: {exc}",
-                file=sys.stderr,
-            )
-
-    print("All top-picks models failed. Using fallback top picks template.", file=sys.stderr)
+    logger.warning("Using fallback top picks template.")
     return {
         "report_html": _build_fallback_top_picks_html(report_date, news),
         "daily_picks": [],
@@ -1102,7 +1230,7 @@ Mandatory output rules:
 
 def generate_single_stock_deep_dive(
     *,
-    api_key: str,
+    groq_api_key: str,
     model_name: str,
     report_date: str,
     symbol: str,
@@ -1111,6 +1239,7 @@ def generate_single_stock_deep_dive(
     support_1: float | None,
     resistance_1: float | None,
     news_text: str,
+    gemini_api_key: str | None = None,
 ) -> dict[str, str]:
     """Generate a strict JSON deep-dive for one stock using provided live data."""
     if current_price is None:
@@ -1157,73 +1286,42 @@ Requirements:
 - future_outlook must be 2-3 sentences.
 - action must be one of: STRONG BUY, BUY, HOLD, SELL."""
 
-    models_to_try = [model_name, *FALLBACK_MODELS]
-    seen: set[str] = set()
+    try:
+        raw = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.25,
+            max_tokens=2048,
+        )
+        parsed = json.loads(_strip_markdown_fences(raw))
+        if not isinstance(parsed, dict):
+            raise ValueError("Single stock response is not a JSON object")
 
-    for candidate in models_to_try:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(
-                model_name=candidate,
-                system_instruction=SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT,
-            )
-            response = model.generate_content(
-                user_prompt,
-                generation_config={
-                    "temperature": 0.25,
-                    "max_output_tokens": 2048,
-                    "response_mime_type": "application/json",
-                    "response_schema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "symbol": {"type": "STRING"},
-                            "current_price": {"type": "STRING"},
-                            "target_price": {"type": "STRING"},
-                            "weightage_recommendation": {"type": "STRING"},
-                            "future_outlook": {"type": "STRING"},
-                            "action": {"type": "STRING"},
-                        },
-                        "required": [
-                            "symbol",
-                            "current_price",
-                            "target_price",
-                            "weightage_recommendation",
-                            "future_outlook",
-                            "action",
-                        ],
-                    },
-                },
-            )
-            parsed = json.loads(_strip_markdown_fences(response.text or ""))
-            if not isinstance(parsed, dict):
-                raise ValueError("Single stock response is not a JSON object")
+        action = str(parsed.get("action", "")).strip().upper()
+        if action not in {"STRONG BUY", "BUY", "HOLD", "SELL"}:
+            action = fallback["action"]
 
-            action = str(parsed.get("action", "")).strip().upper()
-            if action not in {"STRONG BUY", "BUY", "HOLD", "SELL"}:
-                action = fallback["action"]
+        return {
+            "symbol": str(parsed.get("symbol", symbol)).strip().upper() or symbol,
+            "current_price": f"{current_price:.2f}",
+            "target_price": str(parsed.get("target_price", fallback["target_price"])).strip()
+            or fallback["target_price"],
+            "weightage_recommendation": str(
+                parsed.get(
+                    "weightage_recommendation",
+                    fallback["weightage_recommendation"],
+                )
+            ).strip()
+            or fallback["weightage_recommendation"],
+            "future_outlook": str(parsed.get("future_outlook", fallback["future_outlook"])).strip()
+            or fallback["future_outlook"],
+            "action": action,
+        }
+    except Exception as exc:
+        logger.exception("All LLM providers failed for single-stock deep dive: %s", exc)
 
-            return {
-                "symbol": str(parsed.get("symbol", symbol)).strip().upper() or symbol,
-                # Enforce exact fetched live price in final payload.
-                "current_price": f"{current_price:.2f}",
-                "target_price": str(parsed.get("target_price", fallback["target_price"])).strip()
-                or fallback["target_price"],
-                "weightage_recommendation": str(
-                    parsed.get(
-                        "weightage_recommendation",
-                        fallback["weightage_recommendation"],
-                    )
-                ).strip()
-                or fallback["weightage_recommendation"],
-                "future_outlook": str(parsed.get("future_outlook", fallback["future_outlook"])).strip()
-                or fallback["future_outlook"],
-                "action": action,
-            }
-        except Exception as exc:
-            print(f"Single-stock model {candidate} failed: {exc}", file=sys.stderr)
-
-    print("All single-stock models failed. Using fallback deep-dive.", file=sys.stderr)
+    logger.warning("Using fallback single-stock deep dive for %s.", symbol)
     return fallback

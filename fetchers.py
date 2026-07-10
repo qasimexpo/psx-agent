@@ -33,6 +33,7 @@ PSX_PAYOUTS_URL = "https://dps.psx.com.pk/payouts"
 PSX_ANNOUNCEMENTS_URL = "https://dps.psx.com.pk/announcements/companies"
 PSX_SYMBOLS_URL = "https://dps.psx.com.pk/symbols"
 PSX_KSE100_CONSTITUENTS_URL = "https://dps.psx.com.pk/indices/KSE100"
+PSX_TIMESERIES_INT_URL = "https://dps.psx.com.pk/timeseries/int/{symbol}"
 
 HTTP_HEADERS = {
     "User-Agent": (
@@ -655,8 +656,15 @@ def fetch_live_prices_for_symbols(
         prices[symbol] = recovered
         if recovered is not None:
             _LIVE_PRICE_CACHE[symbol] = (recovered, now)
+
+    still_missing = [symbol for symbol in normalized if prices.get(symbol) is None]
+    for symbol in still_missing:
+        psx_price = _fetch_psx_intraday_price(symbol)
+        prices[symbol] = psx_price
+        if psx_price is not None:
+            _LIVE_PRICE_CACHE[symbol] = (psx_price, now)
         else:
-            # Keep failures short-lived so transient TradingView outages can recover quickly.
+            # Keep failures short-lived so transient outages can recover quickly.
             _LIVE_PRICE_CACHE[symbol] = (
                 None,
                 now - max(0, (cache_ttl_seconds - _LIVE_PRICE_FAILURE_CACHE_TTL_SECONDS)),
@@ -692,6 +700,97 @@ _MARKET_TICKER_CACHE_TTL_SECONDS = 300
 _MARKET_TICKER_FETCH_BUDGET_SECONDS = 20.0
 _KSE100_SYMBOLS_CACHE: tuple[list[str], float] | None = None
 _KSE100_SYMBOLS_CACHE_TTL_SECONDS = 6 * 60 * 60
+_KSE100_PSX_QUOTES_CACHE: tuple[dict[str, dict[str, float]], float] | None = None
+_KSE100_PSX_QUOTES_TTL_SECONDS = 300
+
+
+def _fetch_psx_intraday_price(symbol: str) -> float | None:
+    """Fetch latest trade price for one symbol from the official PSX DPS API."""
+    cleaned = normalize_psx_symbol(symbol)
+    if not cleaned:
+        return None
+    url = PSX_TIMESERIES_INT_URL.format(symbol=cleaned)
+    try:
+        response = requests.get(url, headers=HTTP_HEADERS, timeout=12)
+        response.raise_for_status()
+        payload = response.json()
+        rows = payload.get("data") if isinstance(payload, dict) else None
+        if not rows or not isinstance(rows[0], list) or len(rows[0]) < 2:
+            return None
+        return float(rows[0][1])
+    except Exception as exc:
+        logger.warning("PSX intraday price fetch failed for %s: %s", cleaned, exc)
+        return None
+
+
+def _parse_kse100_quotes_from_html(html: str) -> dict[str, dict[str, float]]:
+    """Parse KSE-100 constituent quote table from the PSX indices page."""
+    quotes: dict[str, dict[str, float]] = {}
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        table = soup.find("table")
+        if not table:
+            return quotes
+        for row in table.find_all("tr")[1:]:
+            cells = [cell.get_text(" ", strip=True) for cell in row.find_all("td")]
+            if len(cells) < 5:
+                continue
+            symbol = normalize_psx_symbol(cells[0])
+            if not symbol:
+                continue
+            try:
+                ldcp = float(cells[2].replace(",", ""))
+                current = float(cells[3].replace(",", ""))
+                change = float(cells[4].replace(",", ""))
+            except ValueError:
+                continue
+            quotes[symbol] = {
+                "ldcp": ldcp,
+                "current": current,
+                "change": change,
+            }
+    except Exception as exc:
+        logger.warning("Failed to parse KSE-100 PSX quotes: %s", exc, exc_info=True)
+    return quotes
+
+
+def _fetch_psx_kse100_quotes() -> dict[str, dict[str, float]]:
+    """Fetch all KSE-100 quotes in one PSX page request (TradingView fallback)."""
+    global _KSE100_PSX_QUOTES_CACHE
+
+    now = time.time()
+    if (
+        _KSE100_PSX_QUOTES_CACHE is not None
+        and now - _KSE100_PSX_QUOTES_CACHE[1] < _KSE100_PSX_QUOTES_TTL_SECONDS
+    ):
+        return _KSE100_PSX_QUOTES_CACHE[0]
+
+    html = _fetch_html(PSX_KSE100_CONSTITUENTS_URL)
+    quotes = _parse_kse100_quotes_from_html(html) if html else {}
+    _KSE100_PSX_QUOTES_CACHE = (quotes, now)
+    return quotes
+
+
+def fetch_psx_kse100_quote_map() -> dict[str, dict[str, float]]:
+    """Public accessor for cached KSE-100 PSX quote map."""
+    return _fetch_psx_kse100_quotes()
+
+
+def _build_ticker_row_from_psx_quote(symbol: str, quote: dict[str, float]) -> dict[str, Any]:
+    """Build a ticker row from PSX KSE-100 quote fields."""
+    current = quote["current"]
+    change = quote.get("change", 0.0)
+    ldcp = quote.get("ldcp", current - change)
+    high = max(current, ldcp)
+    low = min(current, ldcp)
+    return {
+        "symbol": symbol,
+        "current_price": round(current, 2),
+        "high": round(high, 2),
+        "low": round(low, 2),
+        "change": round(change, 2),
+        "direction": "UP" if change >= 0 else "DOWN",
+    }
 
 
 def _load_kse100_symbols() -> list[str]:
@@ -862,6 +961,21 @@ def fetch_market_ticker() -> list[dict[str, Any]]:
         rows.append(_build_ticker_row(symbol, indicator_data))
 
     valid_price_count = sum(1 for row in rows if row["current_price"] > 0)
+    if valid_price_count < len(rows):
+        psx_quotes = _fetch_psx_kse100_quotes()
+        if psx_quotes:
+            logger.info(
+                "Filling %s missing ticker prices from PSX KSE-100 page.",
+                len(rows) - valid_price_count,
+            )
+            for index, row in enumerate(rows):
+                if row["current_price"] > 0:
+                    continue
+                quote = psx_quotes.get(row["symbol"])
+                if quote:
+                    rows[index] = _build_ticker_row_from_psx_quote(row["symbol"], quote)
+            valid_price_count = sum(1 for row in rows if row["current_price"] > 0)
+
     if valid_price_count == 0:
         if stale_cache:
             logger.warning(

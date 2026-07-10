@@ -95,7 +95,7 @@ export type DividendCalendarItem = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 15000;
-const TICKER_TIMEOUT_MS = 8000;
+const TICKER_TIMEOUT_MS = 45000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
   try {
@@ -139,8 +139,8 @@ async function apiFetch<T>(
     const message = await parseErrorResponse(res);
     if (res.status === 503) {
       throw new Error(
-        message.includes("GEMINI_API_KEY")
-          ? "AI service unavailable — check GEMINI_API_KEY on the server."
+        message.includes("GROQ_API_KEY")
+          ? "AI service unavailable — check GROQ_API_KEY on the server."
           : message,
       );
     }
