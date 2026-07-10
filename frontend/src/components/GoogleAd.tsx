@@ -26,7 +26,7 @@ export default function GoogleAd({
   fullWidthResponsive = true,
 }: GoogleAdProps) {
   const pushedRef = useRef(false);
-  const adRef = useRef<HTMLElement | null>(null);
+  const adRef = useRef<HTMLModElement | null>(null);
   const [isFilled, setIsFilled] = useState(false);
   const normalizedSlot = slot?.trim() ?? "";
   const hasValidSlot =
