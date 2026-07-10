@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Marquee from "react-fast-marquee";
-import { AlertCircle, ArrowDown, ArrowUp, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp } from "lucide-react";
 import { fetchMarketTicker, type MarketTickerItem } from "@/lib/api";
 
 function getChangePercent(item: MarketTickerItem): number {
@@ -39,7 +39,6 @@ function TickerCard({ item }: { item: MarketTickerItem }) {
 
 export default function SmartTicker() {
   const [rows, setRows] = useState<MarketTickerItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const visibleRows = rows.filter((row) => row.current_price > 0);
 
@@ -47,7 +46,6 @@ export default function SmartTicker() {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
       setError(null);
       try {
         const data = await fetchMarketTicker();
@@ -57,10 +55,6 @@ export default function SmartTicker() {
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load market ticker.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
         }
       }
     }
@@ -73,52 +67,40 @@ export default function SmartTicker() {
     };
   }, []);
 
-  if (loading) {
-    return (
-      <section className="border-y border-gray-200 bg-slate-50 px-4 py-2 sm:px-6">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 text-sm text-slate-600">
-          <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-          Loading market ticker...
-        </div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="border-y border-gray-200 bg-slate-50 px-4 py-2 sm:px-6">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 text-sm text-red-500">
-          <AlertCircle className="h-4 w-4" />
+  return (
+    <section className="overflow-hidden border-y border-gray-200 bg-slate-50 py-2 min-h-[44px]">
+      {error && (
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 pb-1 text-xs text-red-500 sm:px-6">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           {error}
         </div>
-      </section>
-    );
-  }
+      )}
 
-  if (visibleRows.length === 0) {
-    return (
-      <section className="border-y border-gray-200 bg-slate-50 px-4 py-2 sm:px-6">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-sm text-slate-600">
-          <span>Live market ticker is temporarily unavailable. Please refresh shortly.</span>
+      {!error && visibleRows.length === 0 && (
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 text-sm text-slate-600 sm:px-6">
+          <span className="text-xs">Live market ticker is temporarily unavailable.</span>
           <button
             type="button"
             onClick={() => window.location.reload()}
+            suppressHydrationWarning
             className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
           >
             Refresh
           </button>
         </div>
-      </section>
-    );
-  }
+      )}
 
-  return (
-    <section className="overflow-hidden border-y border-gray-200 bg-slate-50 py-2">
-      <Marquee pauseOnHover speed={40} gradient={false}>
-        {visibleRows.map((item) => (
-          <TickerCard key={item.symbol} item={item} />
-        ))}
-      </Marquee>
+      <div
+        className={`transition-opacity duration-200 ${visibleRows.length > 0 ? "opacity-100" : "opacity-0"}`}
+      >
+        {visibleRows.length > 0 && (
+          <Marquee pauseOnHover speed={40} gradient={false}>
+            {visibleRows.map((item) => (
+              <TickerCard key={item.symbol} item={item} />
+            ))}
+          </Marquee>
+        )}
+      </div>
     </section>
   );
 }

@@ -12,8 +12,7 @@ from dotenv import load_dotenv
 
 from ai_agent import (
     SINGLE_STOCK_CACHE_TTL_SECONDS,
-    TOP_PICKS_CACHE_KEY,
-    TOP_PICKS_CACHE_TTL_SECONDS,
+    TOP_PICKS_COUNT,
     apply_live_prices_to_top_picks_result,
     build_holdings_from_rows,
     build_risk_summary,
@@ -25,16 +24,22 @@ from ai_agent import (
     select_top_pick_symbols,
     set_ai_cached,
 )
+from database import (
+    DatabaseUnavailableError,
+    get_all_tickers,
+    get_news_and_events,
+    get_top_picks_rows,
+    parse_news_metadata,
+)
 from fetchers import (
     build_client_report_data,
     build_market_data_cache,
-    fetch_dividend_calendar,
+    fetch_fundamentals,
     fetch_kse100_index,
     fetch_live_prices_for_symbols,
     fetch_market_indicators,
-    fetch_market_ticker,
-    fetch_news_feeds,
     fetch_pakistan_news,
+    fetch_psx_corporate_events,
     fetch_psx_kse100_quote_map,
     format_news_for_prompt,
     format_portfolio_summary_for_prompt,
@@ -46,7 +51,7 @@ from fetchers import (
 DEFAULT_MODEL = "llama-3.1-8b-instant"
 PKT = ZoneInfo("Asia/Karachi")
 logger = logging.getLogger("smartsarmaya.service")
-TOP_PICKS_FALLBACK_SYMBOLS = ["OGDC", "PPL", "LUCK", "HUBC", "MEBL"]
+TOP_PICKS_FALLBACK_SYMBOLS = ["OGDC", "PPL", "LUCK", "HUBC", "MEBL", "ENGRO"]
 
 
 def load_api_config() -> dict[str, str | None]:
@@ -102,6 +107,119 @@ def _refresh_top_picks_live_prices(result: dict[str, Any]) -> dict[str, Any]:
     return apply_live_prices_to_top_picks_result(result, live_prices)
 
 
+def _parse_change_float(change_value: str | float | int) -> float:
+    try:
+        return float(str(change_value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _ticker_row_to_api(row: Any) -> dict[str, Any]:
+    change = _parse_change_float(row.change)
+    return {
+        "symbol": row.symbol,
+        "current_price": float(row.current_price or 0),
+        "high": float(row.high or 0),
+        "low": float(row.low or 0),
+        "change": change,
+        "direction": "UP" if change >= 0 else "DOWN",
+    }
+
+
+def _assemble_top_picks_from_rows(rows: list[Any]) -> dict[str, Any]:
+    by_category = {row.category: row.ai_response_json for row in rows}
+    daily = by_category.get("daily", {})
+    monthly = by_category.get("monthly", {})
+    yearly = by_category.get("yearly", {})
+    report_html = (
+        daily.get("report_html")
+        or monthly.get("report_html")
+        or yearly.get("report_html")
+        or ""
+    )
+    return {
+        "report_html": report_html,
+        "daily_picks": daily.get("picks", []),
+        "monthly_picks": monthly.get("picks", []),
+        "yearly_picks": yearly.get("picks", []),
+    }
+
+
+def _db_ticker_price_map() -> dict[str, float]:
+    """Fast live prices from Neon ticker snapshot."""
+    try:
+        rows = get_all_tickers()
+    except DatabaseUnavailableError:
+        return {}
+    except Exception as exc:
+        logger.warning("Could not load DB ticker prices: %s", exc)
+        return {}
+
+    prices: dict[str, float] = {}
+    for row in rows:
+        price = float(row.current_price or 0)
+        if price > 0:
+            prices[row.symbol] = price
+    return prices
+
+
+def _build_portfolio_market_cache(symbols: set[str]) -> dict[str, Any]:
+    """Build portfolio market cache using DB prices first, then live fallbacks."""
+    db_prices = _db_ticker_price_map()
+    missing = sorted(symbol for symbol in symbols if symbol not in db_prices)
+
+    if missing:
+        live_prices = fetch_live_prices_for_symbols(missing)
+        kse_quotes = fetch_psx_kse100_quote_map()
+        for symbol in missing:
+            live = live_prices.get(symbol)
+            if live is not None and live > 0:
+                db_prices[symbol] = float(live)
+                continue
+            quote = kse_quotes.get(symbol)
+            if quote and quote.get("current", 0) > 0:
+                db_prices[symbol] = float(quote["current"])
+
+    technicals: dict[str, dict[str, Any]] = {}
+    for symbol in symbols:
+        price = db_prices.get(symbol)
+        technicals[symbol] = {
+            "current_price": price,
+            "rsi": None,
+            "volume": None,
+            "r1": None,
+            "s1": None,
+            "error": None if price is not None else "Price unavailable",
+        }
+
+    symbols_missing_price = {
+        symbol for symbol in symbols if technicals[symbol]["current_price"] is None
+    }
+    if symbols_missing_price:
+        try:
+            tv_indicators = fetch_market_indicators(symbols_missing_price)
+            for symbol in symbols_missing_price:
+                tv = tv_indicators.get(symbol, {})
+                merged = dict(technicals[symbol])
+                if tv.get("current_price") is not None:
+                    merged["current_price"] = tv.get("current_price")
+                    merged["error"] = tv.get("error")
+                for field in ("rsi", "volume", "r1", "s1"):
+                    if tv.get(field) is not None:
+                        merged[field] = tv.get(field)
+                if merged["current_price"] is not None:
+                    merged["error"] = None
+                technicals[symbol] = merged
+        except Exception as exc:
+            logger.warning("TradingView indicator enrichment skipped: %s", exc)
+
+    return {
+        "technicals": technicals,
+        "fundamentals": fetch_fundamentals(symbols),
+        "psx_events": fetch_psx_corporate_events(symbols),
+    }
+
+
 def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
     """Fetch market data for the given shares and return structured AI report data."""
     config = load_api_config()
@@ -111,7 +229,7 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
 
     report_date = _report_date()
     symbols = set(portfolio.keys())
-    cache = build_market_data_cache(symbols)
+    cache = _build_portfolio_market_cache(symbols)
     enriched_rows, technical_text, portfolio_summary, client_psx_events = (
         build_client_report_data(portfolio, cache)
     )
@@ -142,16 +260,11 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def generate_top_picks() -> dict[str, Any]:
-    """Generate top picks using symbol-selection -> live price -> final AI pass."""
-    cached = get_ai_cached(TOP_PICKS_CACHE_KEY, TOP_PICKS_CACHE_TTL_SECONDS)
-    if cached is not None:
-        logger.info("Serving top picks from AI cache (%s).", TOP_PICKS_CACHE_KEY)
-        return _refresh_top_picks_live_prices(cached)
-
+def generate_top_picks_for_cron() -> dict[str, Any]:
+    """Live Groq generation for cron job — not used by public GET endpoints."""
     config = load_api_config()
     report_date = _report_date()
-    news = fetch_pakistan_news(limit=10)
+    news = fetch_pakistan_news(limit=5)
     news_text = format_news_for_prompt(news)
     try:
         symbols = select_top_pick_symbols(
@@ -167,15 +280,16 @@ def generate_top_picks() -> dict[str, Any]:
         logger.warning("Using fallback top-pick symbols due to AI quota/error: %s", symbols)
     logger.info("AI symbol selection raw result: %s", symbols)
     cleaned_symbols = normalize_psx_symbols(symbols)
-    if len(cleaned_symbols) < 5:
+    if len(cleaned_symbols) < TOP_PICKS_COUNT:
         logger.warning(
-            "Top-pick symbol selection produced fewer than 5 valid symbols: %s. "
+            "Top-pick symbol selection produced fewer than %s valid symbols: %s. "
             "Falling back to defaults.",
+            TOP_PICKS_COUNT,
             cleaned_symbols,
         )
         cleaned_symbols = TOP_PICKS_FALLBACK_SYMBOLS.copy()
 
-    cleaned_symbols = cleaned_symbols[:5]
+    cleaned_symbols = cleaned_symbols[:TOP_PICKS_COUNT]
     try:
         live_prices = _resolve_live_prices_for_symbols(cleaned_symbols)
     except Exception as exc:
@@ -193,14 +307,80 @@ def generate_top_picks() -> dict[str, Any]:
         live_prices=live_prices,
         gemini_api_key=config["gemini_api_key"],
     )
-    result = _refresh_top_picks_live_prices(result)
-    set_ai_cached(TOP_PICKS_CACHE_KEY, result)
-    return result
+    return _refresh_top_picks_live_prices(result)
 
 
-def get_news() -> dict[str, list[dict[str, str]]]:
-    """Fetch Pakistan and global finance news feeds."""
-    return fetch_news_feeds(pakistan_limit=5, global_limit=5)
+def generate_top_picks(category: str | None = None) -> dict[str, Any]:
+    """Read pre-generated top picks from Neon DB."""
+    try:
+        rows = get_top_picks_rows(category)
+    except DatabaseUnavailableError:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to read top picks from database: %s", exc)
+        raise DatabaseUnavailableError("Database is temporarily unavailable.") from exc
+
+    if not rows:
+        raise ValueError(
+            "Top picks are not available yet. Please try again after the daily update runs."
+        )
+
+    if category:
+        row = rows[0]
+        payload = row.ai_response_json or {}
+        return {
+            "report_html": payload.get("report_html", ""),
+            "daily_picks": payload.get("picks", []) if category == "daily" else [],
+            "monthly_picks": payload.get("picks", []) if category == "monthly" else [],
+            "yearly_picks": payload.get("picks", []) if category == "yearly" else [],
+        }
+
+    assembled = _assemble_top_picks_from_rows(rows)
+    if not any(
+        [
+            assembled["daily_picks"],
+            assembled["monthly_picks"],
+            assembled["yearly_picks"],
+        ]
+    ):
+        raise ValueError("Top picks data in database is incomplete.")
+    return assembled
+
+
+def get_news_and_events_api(
+    *,
+    limit: int = 50,
+    event_type: str | None = None,
+) -> list[dict[str, Any]]:
+    """Read news and corporate events from Neon DB with parsed news metadata."""
+    try:
+        rows = get_news_and_events(limit=limit, event_type=event_type)
+    except DatabaseUnavailableError:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to read news/events from database: %s", exc)
+        raise DatabaseUnavailableError("Database is temporarily unavailable.") from exc
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item: dict[str, Any] = {
+            "id": row.id,
+            "type": row.type,
+            "title_or_symbol": row.title_or_symbol,
+            "description": row.description,
+            "link_or_date": row.link_or_date,
+            "last_updated": row.last_updated,
+            "snippet": None,
+            "source": None,
+            "region": None,
+        }
+        if row.type == "news":
+            meta = parse_news_metadata(row.description)
+            item["snippet"] = meta["snippet"]
+            item["source"] = meta["source"]
+            item["region"] = meta["region"]
+        items.append(item)
+    return items
 
 
 def get_market_index() -> dict[str, Any]:
@@ -209,13 +389,20 @@ def get_market_index() -> dict[str, Any]:
 
 
 def get_market_ticker() -> list[dict[str, Any]]:
-    """Fetch cached technical ticker data for top KSE-100 symbols."""
-    return fetch_market_ticker()
+    """Read ticker snapshot from Neon DB."""
+    try:
+        rows = get_all_tickers()
+    except DatabaseUnavailableError:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to read tickers from database: %s", exc)
+        raise DatabaseUnavailableError("Database is temporarily unavailable.") from exc
 
-
-def get_dividend_calendar() -> list[dict[str, str]]:
-    """Fetch upcoming dividend and board-meeting events."""
-    return fetch_dividend_calendar()
+    if not rows:
+        raise ValueError(
+            "Market ticker data is not available yet. Please try again after the next update."
+        )
+    return [_ticker_row_to_api(row) for row in rows]
 
 
 def get_symbol_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
@@ -240,11 +427,14 @@ def analyze_single_stock(symbol: str) -> dict[str, str]:
     indicators = fetch_market_indicators({normalized_symbol}).get(normalized_symbol, {})
     current_price = market if market is not None else indicators.get("current_price")
     if current_price is None:
-        ticker_map = {row.get("symbol"): row for row in fetch_market_ticker()}
-        ticker_row = ticker_map.get(normalized_symbol, {})
-        ticker_price = ticker_row.get("current_price")
-        if isinstance(ticker_price, (int, float)) and ticker_price > 0:
-            current_price = float(ticker_price)
+        try:
+            ticker_map = {row.get("symbol"): row for row in get_market_ticker()}
+            ticker_row = ticker_map.get(normalized_symbol, {})
+            ticker_price = ticker_row.get("current_price")
+            if isinstance(ticker_price, (int, float)) and ticker_price > 0:
+                current_price = float(ticker_price)
+        except (DatabaseUnavailableError, ValueError):
+            pass
 
     if current_price is None:
         raise ValueError(

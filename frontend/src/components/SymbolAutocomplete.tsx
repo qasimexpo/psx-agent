@@ -133,6 +133,7 @@ export default function SymbolAutocomplete({
         placeholder={placeholder}
         disabled={disabled}
         autoComplete="off"
+        suppressHydrationWarning
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}

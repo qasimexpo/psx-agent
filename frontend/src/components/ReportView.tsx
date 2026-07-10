@@ -9,6 +9,7 @@ import { exportReportToPdf } from "@/lib/exportPdf";
 import { IMAGES } from "@/lib/images";
 
 type ReportViewProps = {
+  visible?: boolean;
   data: AnalyzeResult | null;
   loading?: boolean;
 };
@@ -27,9 +28,17 @@ function formatPl(value: number | null): string {
   return `${sign}Rs. ${Math.abs(value).toLocaleString("en-PK", { maximumFractionDigits: 0 })}`;
 }
 
-export default function ReportView({ data, loading = false }: ReportViewProps) {
+export default function ReportView({
+  visible = true,
+  data,
+  loading = false,
+}: ReportViewProps) {
   const [exporting, setExporting] = useState(false);
   const [showFullReport, setShowFullReport] = useState(false);
+
+  if (!visible) {
+    return null;
+  }
 
   const handleExport = async () => {
     if (!data) return;
@@ -79,16 +88,15 @@ export default function ReportView({ data, loading = false }: ReportViewProps) {
           )}
 
           {!loading && !data && (
-            <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-              <div className="rounded-2xl bg-emerald-50 p-4">
-                <Bot className="h-8 w-8 text-emerald-600" />
+            <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+              <div className="rounded-2xl bg-red-50 p-4">
+                <Bot className="h-8 w-8 text-red-500" />
               </div>
               <p className="text-lg font-semibold text-[#0B132B]">
-                Your AI-generated portfolio audit will appear here.
+                Portfolio analysis could not be completed.
               </p>
               <p className="max-w-lg text-sm text-slate-500">
-                Add your holdings above and click Generate AI Report to get actionable
-                recommendations, risk insights, and downloadable results.
+                Please review the error above and try generating the report again.
               </p>
             </div>
           )}

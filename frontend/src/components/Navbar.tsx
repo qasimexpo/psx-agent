@@ -23,18 +23,30 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-4 text-sm font-medium sm:gap-6">
+        <nav className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm font-medium sm:gap-6">
           <a
             href="#analyze"
             className="text-slate-300 transition hover:text-emerald-400"
           >
-            Analyze
+            Portfolio
           </a>
           <a
             href="#top-picks"
             className="text-slate-300 transition hover:text-emerald-400"
           >
             Top Picks
+          </a>
+          <a
+            href="#stock-analyzer"
+            className="text-slate-300 transition hover:text-emerald-400"
+          >
+            Stock Analyzer
+          </a>
+          <a
+            href="#dividends-events"
+            className="text-slate-300 transition hover:text-emerald-400"
+          >
+            Dividends &amp; Events
           </a>
           <a
             href="#news"

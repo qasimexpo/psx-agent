@@ -767,7 +767,8 @@ def _fetch_psx_kse100_quotes() -> dict[str, dict[str, float]]:
 
     html = _fetch_html(PSX_KSE100_CONSTITUENTS_URL)
     quotes = _parse_kse100_quotes_from_html(html) if html else {}
-    _KSE100_PSX_QUOTES_CACHE = (quotes, now)
+    if quotes:
+        _KSE100_PSX_QUOTES_CACHE = (quotes, now)
     return quotes
 
 
@@ -987,6 +988,50 @@ def fetch_market_ticker() -> list[dict[str, Any]]:
         )
 
     _MARKET_TICKER_CACHE = (rows, now)
+    return rows
+
+
+def fetch_kse100_ticker_rows_for_db(
+    *,
+    tv_recovery_limit: int = 15,
+) -> list[dict[str, Any]]:
+    """Build ticker rows for all KSE-100 constituents (cron / DB upsert)."""
+    psx_quotes = _fetch_psx_kse100_quotes()
+    if not psx_quotes:
+        time.sleep(3.0)
+        psx_quotes = _fetch_psx_kse100_quotes()
+
+    if psx_quotes:
+        symbol_list = list(psx_quotes.keys())
+    else:
+        symbol_list = _load_kse100_symbols()
+
+    rows_by_symbol: dict[str, dict[str, Any]] = {}
+    for symbol in symbol_list:
+        quote = psx_quotes.get(symbol)
+        if quote:
+            rows_by_symbol[symbol] = _build_ticker_row_from_psx_quote(symbol, quote)
+
+    missing = [symbol for symbol in symbol_list if symbol not in rows_by_symbol]
+    if missing:
+        logger.info(
+            "PSX KSE-100 page missing %s symbols; trying TradingView for up to %s.",
+            len(missing),
+            tv_recovery_limit,
+        )
+        for index, symbol in enumerate(missing[:tv_recovery_limit]):
+            if index > 0:
+                time.sleep(_TV_POST_CALL_DELAY)
+            recovered = _fetch_symbol_ticker_with_handler(symbol)
+            if recovered is not None:
+                rows_by_symbol[symbol] = _build_ticker_row(symbol, recovered)
+
+    rows = [rows_by_symbol[symbol] for symbol in symbol_list if symbol in rows_by_symbol]
+    logger.info(
+        "Prepared %s/%s KSE-100 ticker rows for DB upsert.",
+        len(rows),
+        len(symbol_list),
+    )
     return rows
 
 

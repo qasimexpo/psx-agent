@@ -1,23 +1,23 @@
 """
-PSX AI FastAPI backend — stateless portfolio analysis and top picks.
+PSX AI FastAPI backend — portfolio analysis (real-time) and DB-backed market reads.
 """
 
 import logging
-from typing import Any
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from database import DatabaseUnavailableError, init_db
 from service import (
     analyze_portfolio,
     analyze_single_stock,
     generate_top_picks,
-    get_dividend_calendar,
     get_market_index,
     get_market_ticker,
-    get_news,
+    get_news_and_events_api,
     get_symbol_suggestions,
     load_api_config,
 )
@@ -29,7 +29,7 @@ if not logger.handlers:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
 
-app = FastAPI(title="SmartSarmaya API", version="1.0.0")
+app = FastAPI(title="SmartSarmaya API", version="5.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,13 +42,14 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_validate_config() -> None:
-    """Fail fast on critical env/config errors in deployment."""
+    """Fail fast on critical env/config errors and ensure DB tables exist."""
     try:
         cfg = load_api_config()
         logger.info(
             "Startup config validated (AI model: %s).",
             cfg.get("model_name", "unknown"),
         )
+        init_db()
     except Exception:
         logger.exception("Startup configuration validation failed.")
         raise
@@ -69,6 +70,17 @@ async def log_requests(request: Request, call_next):
         response.status_code,
     )
     return response
+
+
+@app.exception_handler(DatabaseUnavailableError)
+async def database_unavailable_handler(
+    request: Request, exc: DatabaseUnavailableError
+) -> JSONResponse:
+    logger.error("Database unavailable at %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": str(exc)},
+    )
 
 
 @app.exception_handler(Exception)
@@ -134,20 +146,6 @@ class TopPicksResponse(BaseModel):
     yearly_picks: list[PickCard]
 
 
-class NewsItem(BaseModel):
-    title: str
-    snippet: str
-    source: str
-    link: str
-
-
-class NewsResponse(BaseModel):
-    pakistan: list[NewsItem]
-    global_news: list[NewsItem] = Field(serialization_alias="global")
-
-    model_config = {"populate_by_name": True}
-
-
 class MarketIndexResponse(BaseModel):
     name: str
     value: float
@@ -188,11 +186,16 @@ class MarketTickerItem(BaseModel):
     direction: str
 
 
-class DividendCalendarItem(BaseModel):
-    symbol: str
-    event_type: str
-    details: str
-    date: str
+class NewsAndEventsItem(BaseModel):
+    id: int
+    type: str
+    title_or_symbol: str
+    description: str
+    link_or_date: str
+    last_updated: datetime
+    snippet: str | None = None
+    source: str | None = None
+    region: str | None = None
 
 
 @app.get("/health")
@@ -223,10 +226,14 @@ def analyze_portfolio_endpoint(request: PortfolioRequest) -> AnalyzePortfolioRes
 
 
 @app.get("/top_picks", response_model=TopPicksResponse)
-def top_picks_endpoint() -> TopPicksResponse:
+def top_picks_endpoint(
+    category: str | None = Query(default=None, pattern="^(daily|monthly|yearly)$"),
+) -> TopPicksResponse:
     try:
-        result = generate_top_picks()
+        result = generate_top_picks(category)
         return TopPicksResponse(**result)
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         message = str(exc)
         if "GROQ_API_KEY" in message:
@@ -237,23 +244,25 @@ def top_picks_endpoint() -> TopPicksResponse:
         logger.exception("top_picks failed: %s", exc)
         raise HTTPException(
             status_code=500,
-            detail="Failed to generate top picks report.",
+            detail="Failed to load top picks report.",
         ) from exc
 
 
-@app.get("/news", response_model=NewsResponse)
-def news_endpoint() -> NewsResponse:
+@app.get("/news_and_events", response_model=list[NewsAndEventsItem])
+def news_and_events_endpoint(
+    type: str | None = Query(default=None, alias="type"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[NewsAndEventsItem]:
     try:
-        data = get_news()
-        return NewsResponse(
-            pakistan=[NewsItem(**item) for item in data["pakistan"]],
-            global_news=[NewsItem(**item) for item in data["global"]],
-        )
+        items = get_news_and_events_api(limit=limit, event_type=type)
+        return [NewsAndEventsItem(**item) for item in items]
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("news endpoint failed: %s", exc)
+        logger.exception("news_and_events endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
-            detail="Failed to fetch news.",
+            detail="Failed to load news and events.",
         ) from exc
 
 
@@ -273,23 +282,15 @@ def market_index_endpoint() -> MarketIndexResponse:
 def market_ticker_endpoint() -> list[MarketTickerItem]:
     try:
         return [MarketTickerItem(**item) for item in get_market_ticker()]
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("market_ticker endpoint failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch market ticker data.",
-        ) from exc
-
-
-@app.get("/dividend_calendar", response_model=list[DividendCalendarItem])
-def dividend_calendar_endpoint() -> list[DividendCalendarItem]:
-    try:
-        return [DividendCalendarItem(**item) for item in get_dividend_calendar()]
-    except Exception as exc:
-        logger.exception("dividend_calendar endpoint failed: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch dividend calendar.",
         ) from exc
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAdsenseClientId } from "@/lib/adsense";
 
 declare global {
@@ -26,6 +26,8 @@ export default function GoogleAd({
   fullWidthResponsive = true,
 }: GoogleAdProps) {
   const pushedRef = useRef(false);
+  const adRef = useRef<HTMLElement | null>(null);
+  const [isFilled, setIsFilled] = useState(false);
   const normalizedSlot = slot?.trim() ?? "";
   const hasValidSlot =
     normalizedSlot.length > 0 &&
@@ -42,22 +44,39 @@ export default function GoogleAd({
     }
   }, [hasValidSlot]);
 
+  useEffect(() => {
+    const el = adRef.current;
+    if (!el || !hasValidSlot || !ADS_CLIENT) return;
+
+    const readStatus = () => {
+      const status = el.getAttribute("data-ad-status");
+      if (status === "filled") {
+        setIsFilled(true);
+      } else if (status === "unfilled") {
+        setIsFilled(false);
+      }
+    };
+
+    readStatus();
+    const observer = new MutationObserver(readStatus);
+    observer.observe(el, {
+      attributes: true,
+      attributeFilter: ["data-ad-status"],
+    });
+    return () => observer.disconnect();
+  }, [hasValidSlot, ADS_CLIENT]);
+
   if (!hasValidSlot || !ADS_CLIENT) {
-    return (
-      <div
-        className={`flex min-h-[90px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-100 px-4 text-xs font-medium uppercase tracking-wide text-slate-500 ${className}`}
-      >
-        Advertisement
-      </div>
-    );
+    return null;
   }
 
   return (
     <div
       suppressHydrationWarning
-      className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}
+      className={`${isFilled ? "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" : "hidden"} ${className}`}
     >
       <ins
+        ref={adRef}
         suppressHydrationWarning
         className="adsbygoogle block"
         style={{ display: "block" }}

@@ -47,9 +47,16 @@ export type NewsItem = {
   link: string;
 };
 
-export type NewsResult = {
-  pakistan: NewsItem[];
-  global: NewsItem[];
+export type NewsAndEventsItem = {
+  id: number;
+  type: string;
+  title_or_symbol: string;
+  description: string;
+  link_or_date: string;
+  last_updated: string;
+  snippet?: string | null;
+  source?: string | null;
+  region?: string | null;
 };
 
 export type PickHorizon = "daily" | "monthly" | "yearly";
@@ -95,7 +102,8 @@ export type DividendCalendarItem = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 15000;
-const TICKER_TIMEOUT_MS = 45000;
+const TICKER_TIMEOUT_MS = 10000;
+const AI_ANALYSIS_TIMEOUT_MS = 180000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
   try {
@@ -118,6 +126,7 @@ async function apiFetch<T>(
   path: string,
   options?: RequestInit,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  timeoutMessage = "Request timed out while waiting for live market data.",
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -126,7 +135,7 @@ async function apiFetch<T>(
     res = await fetch(`${API_URL}${path}`, { ...options, signal: controller.signal });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("Request timed out while waiting for live market data.");
+      throw new Error(timeoutMessage);
     }
     throw new Error(
       `Cannot reach the analysis server. Make sure the FastAPI backend is running at ${API_URL}.`,
@@ -151,19 +160,45 @@ async function apiFetch<T>(
 }
 
 export async function analyzePortfolio(shares: Share[]): Promise<AnalyzeResult> {
-  return apiFetch<AnalyzeResult>("/analyze_portfolio", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ shares }),
-  });
+  return apiFetch<AnalyzeResult>(
+    "/analyze_portfolio",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shares }),
+    },
+    AI_ANALYSIS_TIMEOUT_MS,
+    "Portfolio analysis is taking longer than expected. Please wait and try again.",
+  );
 }
 
-export async function fetchTopPicks(): Promise<TopPicksResult> {
-  return apiFetch<TopPicksResult>("/top_picks");
+export async function fetchTopPicks(category?: PickHorizon): Promise<TopPicksResult> {
+  const params = category ? `?category=${category}` : "";
+  return apiFetch<TopPicksResult>(`/top_picks${params}`);
 }
 
-export async function fetchNews(): Promise<NewsResult> {
-  return apiFetch<NewsResult>("/news");
+export function toNewsItem(item: NewsAndEventsItem): NewsItem {
+  return {
+    title: item.title_or_symbol,
+    snippet: item.snippet || item.description,
+    source: item.source || "News",
+    link: item.link_or_date,
+  };
+}
+
+export function toDividendRow(item: NewsAndEventsItem): DividendCalendarItem {
+  const label = item.type === "board_meeting" ? "Board Meeting" : "Dividend";
+  return {
+    symbol: item.title_or_symbol,
+    event_type: label,
+    details: item.description,
+    date: item.link_or_date,
+  };
+}
+
+export async function fetchNewsAndEvents(type?: string): Promise<NewsAndEventsItem[]> {
+  const params = type ? `?type=${encodeURIComponent(type)}` : "";
+  return apiFetch<NewsAndEventsItem[]>(`/news_and_events${params}`);
 }
 
 export async function fetchMarketIndex(): Promise<MarketIndexResult> {
@@ -187,17 +222,18 @@ export async function searchSymbols(
 export async function analyzeSingleStock(
   symbol: string,
 ): Promise<SingleStockAnalyzeResult> {
-  return apiFetch<SingleStockAnalyzeResult>("/analyze_single_stock", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbol }),
-  });
+  return apiFetch<SingleStockAnalyzeResult>(
+    "/analyze_single_stock",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol }),
+    },
+    AI_ANALYSIS_TIMEOUT_MS,
+    "Stock analysis is taking longer than expected. Please wait and try again.",
+  );
 }
 
 export async function fetchMarketTicker(): Promise<MarketTickerItem[]> {
   return apiFetch<MarketTickerItem[]>("/market_ticker", undefined, TICKER_TIMEOUT_MS);
-}
-
-export async function fetchDividendCalendar(): Promise<DividendCalendarItem[]> {
-  return apiFetch<DividendCalendarItem[]>("/dividend_calendar");
 }

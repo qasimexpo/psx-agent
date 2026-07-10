@@ -22,9 +22,11 @@ export default function HomePage() {
   const [pendingReport, setPendingReport] = useState<AnalyzeResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [apiDone, setApiDone] = useState(false);
+  const [hasAttemptedAnalysis, setHasAttemptedAnalysis] = useState(false);
 
   const handleLoadingChange = useCallback((isLoading: boolean, symbols?: string[]) => {
     if (isLoading) {
+      setHasAttemptedAnalysis(true);
       setShowProgress(true);
       setAnalyzeSymbols(symbols ?? []);
       setPendingReport(null);
@@ -80,10 +82,14 @@ export default function HomePage() {
       />
       <section className="px-4 py-2 sm:px-6">
         <div className="mx-auto max-w-6xl">
-          <GoogleAd slot={topSlot} className="min-h-[90px]" />
+          <GoogleAd slot={topSlot} />
         </div>
       </section>
-      <ReportView data={report} loading={showProgress} />
+      <ReportView
+        visible={hasAttemptedAnalysis}
+        data={report}
+        loading={showProgress}
+      />
       <TopPicks />
       <QuickStockAnalyzer />
       <DividendCalendar />

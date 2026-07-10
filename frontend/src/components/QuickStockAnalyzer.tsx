@@ -54,7 +54,7 @@ export default function QuickStockAnalyzer() {
   };
 
   return (
-    <section className="px-4 py-12 sm:px-6">
+    <section id="stock-analyzer" className="scroll-mt-20 px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-[#0B132B] sm:text-3xl">Quick Stock Analyzer</h2>
@@ -78,6 +78,7 @@ export default function QuickStockAnalyzer() {
             <button
               type="submit"
               disabled={loading}
+              suppressHydrationWarning
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-[170px]"
             >
               {loading ? (

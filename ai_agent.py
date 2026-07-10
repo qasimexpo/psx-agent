@@ -27,6 +27,8 @@ GROQ_MODEL_ALIASES = {
 }
 logger = logging.getLogger("smartsarmaya.ai")
 
+TOP_PICKS_COUNT = 6
+
 _AI_RESPONSE_CACHE: dict[str, tuple[Any, float]] = {}
 TOP_PICKS_CACHE_KEY = "top_picks_daily_v3"
 TOP_PICKS_CACHE_TTL_SECONDS = 6 * 60 * 60
@@ -601,7 +603,7 @@ Rules:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=0.4,
-            max_tokens=16384,
+            max_tokens=8192,
         )
         return _parse_report_json(raw)
     except Exception as exc:
@@ -809,34 +811,31 @@ Rules:
 """
 
 
-TOP_PICK_SYMBOL_SELECTION_SYSTEM_PROMPT = """You are a PSX equity research analyst.
+TOP_PICK_SYMBOL_SELECTION_SYSTEM_PROMPT = f"""You are a PSX equity research analyst.
 
 Task:
-- Analyze provided PSX news headlines and return ONLY 5 PSX ticker symbols as JSON.
+- Analyze provided PSX news headlines and return ONLY {TOP_PICKS_COUNT} PSX ticker symbols as JSON.
 
 Output rules:
 - Output ONLY a JSON object with key "symbols".
-- "symbols" must be an array of exactly 5 uppercase PSX tickers.
+- "symbols" must be an array of exactly {TOP_PICKS_COUNT} uppercase PSX tickers.
 - Do not include explanations, markdown, or code fences.
 """
 
 
-TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT = """You are a PSX equity research analyst producing Shariah-compliant stock picks for the Pakistan Stock Exchange.
+TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT = f"""You are a PSX equity research analyst producing Shariah-compliant stock picks for the Pakistan Stock Exchange.
 
 Rules:
-- Output ONLY a valid JSON object with keys: "report_html", "daily_picks", "monthly_picks", "yearly_picks".
-- daily_picks, monthly_picks, and yearly_picks must each contain exactly 5 objects using ONLY the 5 provided symbols (reorder per horizon is fine; no extra tickers).
-- CRITICAL: You MUST use the exact numerical values provided in the LIVE_PRICES_DATA dictionary for the current_price field.
-- DO NOT use your internal knowledge or historical data for prices.
-- If a symbol is in LIVE_PRICES_DATA, use that exact price for current_price.
-- If a symbol's price is missing or "N/A" in LIVE_PRICES_DATA, you MUST output "N/A" for current_price.
-- Under NO circumstances should you invent or estimate a current price.
-- For each pick, Target Buy Zone and Exit Target must be numeric PKR values derived from the provided current price when available.
-- You MUST NEVER write "Cannot be determined", "Unknown", or similar non-actionable placeholders for buy_zone or exit_target.
-- When current_price is "N/A", use percentage-style buy/exit targets (e.g., "Buy on 5% dip", "Target +12%").
-- report_html must include Daily, Monthly, and Yearly Top 5 sections as HTML tables.
-- Use professional institutional tone and clearly label as AI suggestions (not fatwas).
+- Output ONLY a valid JSON object with keys: "daily_picks", "monthly_picks", "yearly_picks".
+- Each picks array must contain exactly {TOP_PICKS_COUNT} objects using ONLY the {TOP_PICKS_COUNT} provided symbols (reorder per horizon is fine; no extra tickers).
+- CRITICAL: Use exact LIVE_PRICES_DATA values for current_price. Never invent prices.
+- If LIVE_PRICES_DATA shows "N/A", set current_price to "N/A" and use percentage-style buy/exit targets.
+- buy_zone and exit_target must be actionable (numeric PKR when price known, otherwise percentages).
+- Each pick object: symbol, sector, summary, why, outlook_short, outlook_long, buy_zone, current_price, exit_target.
+- Keep summaries concise (1-2 sentences). Professional tone; AI suggestions only (not fatwas).
 """
+
+TOP_PICKS_CRON_MAX_TOKENS = 4096
 
 
 SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT = """You are a PSX single-stock analyst producing a concise institutional deep-dive.
@@ -897,11 +896,11 @@ def _parse_top_pick_symbols_json(raw: str) -> list[str]:
         symbol = normalize_psx_symbol(item)
         if symbol and symbol not in symbols:
             symbols.append(symbol)
-        if len(symbols) == 5:
+        if len(symbols) == TOP_PICKS_COUNT:
             break
 
-    if len(symbols) < 5:
-        raise ValueError("Model returned fewer than 5 valid symbols")
+    if len(symbols) < TOP_PICKS_COUNT:
+        raise ValueError(f"Model returned fewer than {TOP_PICKS_COUNT} valid symbols")
     return symbols
 
 
@@ -1033,7 +1032,7 @@ def _parse_pick_list(raw_list: Any) -> list[dict[str, str]]:
     if not isinstance(raw_list, list):
         return []
     picks: list[dict[str, str]] = []
-    for item in raw_list[:5]:
+    for item in raw_list[:TOP_PICKS_COUNT]:
         if isinstance(item, dict):
             picks.append(_normalize_pick_item(item))
     return picks
@@ -1046,15 +1045,80 @@ def _parse_top_picks_structured(raw: str) -> dict[str, Any]:
         raise ValueError("Response is not a JSON object")
 
     report_html = data.get("report_html", "").strip()
+    daily_picks = _parse_pick_list(data.get("daily_picks", []))
+    monthly_picks = _parse_pick_list(data.get("monthly_picks", []))
+    yearly_picks = _parse_pick_list(data.get("yearly_picks", []))
+
     if not report_html:
-        raise ValueError("Missing report_html key")
+        if not any([daily_picks, monthly_picks, yearly_picks]):
+            raise ValueError("Missing report_html and pick arrays")
+        report_html = _build_report_html_from_picks(
+            report_date="",
+            daily_picks=daily_picks,
+            monthly_picks=monthly_picks,
+            yearly_picks=yearly_picks,
+        )
 
     return {
         "report_html": _wrap_html_document(report_html),
+        "daily_picks": daily_picks,
+        "monthly_picks": monthly_picks,
+        "yearly_picks": yearly_picks,
+    }
+
+
+def _parse_top_picks_picks_only(raw: str) -> dict[str, list[dict[str, str]]]:
+    text = _strip_markdown_fences(raw)
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("Response is not a JSON object")
+    return {
         "daily_picks": _parse_pick_list(data.get("daily_picks", [])),
         "monthly_picks": _parse_pick_list(data.get("monthly_picks", [])),
         "yearly_picks": _parse_pick_list(data.get("yearly_picks", [])),
     }
+
+
+def _build_report_html_from_picks(
+    *,
+    report_date: str,
+    daily_picks: list[dict[str, str]],
+    monthly_picks: list[dict[str, str]],
+    yearly_picks: list[dict[str, str]],
+) -> str:
+    def _table(title: str, picks: list[dict[str, str]]) -> str:
+        rows = ""
+        for pick in picks:
+            rows += (
+                "<tr>"
+                f"<td>{escape(pick.get('symbol', ''))}</td>"
+                f"<td>{escape(pick.get('summary', ''))}</td>"
+                f"<td>{escape(pick.get('current_price', 'N/A'))}</td>"
+                f"<td>{escape(pick.get('buy_zone', ''))}</td>"
+                f"<td>{escape(pick.get('exit_target', ''))}</td>"
+                "</tr>"
+            )
+        if not rows:
+            rows = "<tr><td colspan='5'>No picks available.</td></tr>"
+        return (
+            f"<h2>{escape(title)}</h2>"
+            "<table border='1' cellpadding='6' cellspacing='0' style='width:100%;border-collapse:collapse;'>"
+            "<tr><th>Ticker</th><th>Thesis</th><th>Current Price</th><th>Buy Zone</th><th>Exit Target</th></tr>"
+            f"{rows}</table>"
+        )
+
+    title = (
+        f"PSX Top {TOP_PICKS_COUNT} Picks — {escape(report_date)}"
+        if report_date
+        else f"PSX Top {TOP_PICKS_COUNT} Picks"
+    )
+    body = (
+        f"<h1 style='color:#111827;'>{title}</h1>"
+        + _table(f"Daily Top {TOP_PICKS_COUNT} Picks", daily_picks)
+        + _table(f"Monthly Top {TOP_PICKS_COUNT} Picks", monthly_picks)
+        + _table(f"Yearly Top {TOP_PICKS_COUNT} Picks", yearly_picks)
+    )
+    return _wrap_html_document(body)
 
 
 def generate_top_picks_structured(
@@ -1118,8 +1182,8 @@ def select_top_pick_symbols(
     news_text: str,
     gemini_api_key: str | None = None,
 ) -> list[str]:
-    """Select top 5 symbols from news context."""
-    user_prompt = f"""Select exactly 5 PSX ticker symbols for top picks.
+    """Select top pick symbols from news context."""
+    user_prompt = f"""Select exactly {TOP_PICKS_COUNT} PSX ticker symbols for top picks.
 
 Report Date (PKT): {report_date}
 
@@ -1127,7 +1191,7 @@ Report Date (PKT): {report_date}
 {news_text}
 
 Return JSON only:
-{{"symbols": ["EFERT", "MARI", "SYS", "MEBL", "HUBC"]}}"""
+{{"symbols": ["EFERT", "MARI", "SYS", "MEBL", "HUBC", "OGDC"]}}"""
 
     try:
         raw_text = _call_llm_json(
@@ -1167,38 +1231,18 @@ def generate_top_picks_with_live_prices(
     live_prices_json = json.dumps(live_prices_data, indent=2)
     symbols_list = ", ".join(recommended_symbols)
 
-    user_prompt = f"""Generate today's PSX Top 5 Picks report from provided symbols and exact live prices.
+    user_prompt = f"""Generate PSX Top {TOP_PICKS_COUNT} Picks for three horizons using ONLY these symbols and live prices.
 
 Report Date (PKT): {report_date}
-
-=== NEWS HEADLINES ===
-{news_text}
-
-=== PROVIDED SYMBOLS (use ONLY these 5 in every horizon) ===
-{symbols_list}
-
-=== LIVE_PRICES_DATA (authoritative) ===
+Symbols: {symbols_list}
+LIVE_PRICES_DATA:
 {live_prices_json}
 
-Return a JSON object with:
-1. "report_html" — full HTML with Daily, Monthly, and Yearly Top 5 table sections
-2. "daily_picks" — array of exactly 5 objects (ONLY the 5 provided symbols)
-3. "monthly_picks" — array of exactly 5 objects (ONLY the 5 provided symbols)
-4. "yearly_picks" — array of exactly 5 objects (ONLY the 5 provided symbols)
+News (context):
+{news_text[:2000]}
 
-Each pick object must include:
-symbol, sector, summary, why, outlook_short, outlook_long, buy_zone, current_price, exit_target
-
-CRITICAL PRICE RULES:
-- Use LIVE_PRICES_DATA values exactly for current_price.
-- DO NOT use internal knowledge or historical prices.
-- If LIVE_PRICES_DATA shows "N/A" for a symbol, set current_price to "N/A".
-- Never invent or estimate a current price.
-
-Mandatory output rules:
-- Never write "Cannot be determined" for buy_zone or exit_target.
-- When current_price is "N/A", use percentage-style buy/exit targets.
-- Keep targets clear and actionable."""
+Return JSON with daily_picks, monthly_picks, yearly_picks ({TOP_PICKS_COUNT} objects each).
+Use LIVE_PRICES_DATA exactly for current_price."""
 
     try:
         raw = _call_llm_json(
@@ -1208,9 +1252,19 @@ Mandatory output rules:
             system_prompt=TOP_PICKS_WITH_LIVE_PRICES_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.3,
-            max_tokens=16384,
+            max_tokens=TOP_PICKS_CRON_MAX_TOKENS,
         )
-        parsed = _parse_top_picks_structured(raw)
+        parsed_picks = _parse_top_picks_picks_only(raw)
+        report_html = _build_report_html_from_picks(
+            report_date=report_date,
+            daily_picks=parsed_picks["daily_picks"],
+            monthly_picks=parsed_picks["monthly_picks"],
+            yearly_picks=parsed_picks["yearly_picks"],
+        )
+        parsed = {
+            "report_html": report_html,
+            **parsed_picks,
+        }
         expanded_prices = _expand_live_prices_for_result(parsed, live_prices)
         return apply_live_prices_to_top_picks_result(parsed, expanded_prices)
     except Exception as exc:
