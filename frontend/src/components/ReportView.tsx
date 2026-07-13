@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Bot, ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
+import { Bot, Download, Loader2 } from "lucide-react";
 import WhatsAppCta from "@/components/WhatsAppCta";
 import type { AnalyzeResult } from "@/lib/api";
 import { exportReportToPdf } from "@/lib/exportPdf";
@@ -34,7 +34,6 @@ export default function ReportView({
   loading = false,
 }: ReportViewProps) {
   const [exporting, setExporting] = useState(false);
-  const [showFullReport, setShowFullReport] = useState(false);
 
   if (!visible) {
     return null;
@@ -121,7 +120,7 @@ export default function ReportView({
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px] border-collapse text-sm">
+                <table className="w-full min-w-[1100px] border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-[#0B132B]">
                       <th className="px-3 py-2.5">Symbol</th>
@@ -130,6 +129,8 @@ export default function ReportView({
                       <th className="px-3 py-2.5">Live Price</th>
                       <th className="px-3 py-2.5">P/L (PKR)</th>
                       <th className="px-3 py-2.5">RSI</th>
+                      <th className="px-3 py-2.5">S1 (Support)</th>
+                      <th className="px-3 py-2.5">R1 (Resistance)</th>
                       <th className="px-3 py-2.5">AI Action</th>
                     </tr>
                   </thead>
@@ -156,6 +157,12 @@ export default function ReportView({
                         <td className="whitespace-nowrap px-3 py-2.5">
                           {row.rsi !== null ? row.rsi.toFixed(2) : "N/A"}
                         </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          {formatPrice(row.s1)}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          {formatPrice(row.r1)}
+                        </td>
                         <td className="px-3 py-2.5">{row.ai_action}</td>
                       </tr>
                     ))}
@@ -180,31 +187,6 @@ export default function ReportView({
             </>
           )}
         </div>
-
-        {data && !loading && (
-          <div className="mt-6">
-            <button
-              type="button"
-              onClick={() => setShowFullReport((v) => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700"
-            >
-              {showFullReport ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-              {showFullReport ? "Hide Full AI Report" : "View Full AI Report"}
-            </button>
-
-            {showFullReport && (
-              <div className="report-content mt-4 rounded-2xl border border-slate-200 bg-white p-6">
-                <div className="report-html-wrap overflow-x-auto">
-                  <div dangerouslySetInnerHTML={{ __html: data.report_html }} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </section>
   );

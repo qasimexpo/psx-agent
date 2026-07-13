@@ -17,7 +17,7 @@ from database import (
     upsert_ticker_rows,
     upsert_top_picks,
 )
-from service import _assemble_top_picks_from_rows, get_news_and_events_api
+from service import generate_top_picks, get_news_and_events_api
 
 
 class TestDatabaseReads(unittest.TestCase):
@@ -59,34 +59,37 @@ class TestDatabaseReads(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0].current_price, 196.0)
 
-    def test_top_picks_assembly(self):
+    def test_top_picks_v6_upsert_and_read(self):
         upsert_top_picks(
             "daily",
+            "Cement",
+            {
+                "picks": [{"symbol": "LUCK", "current_price": "950.00"}],
+                "report_html": "<html>Daily Cement</html>",
+            },
+        )
+        upsert_top_picks(
+            "daily",
+            "Fertilizer",
             {
                 "picks": [{"symbol": "EFERT", "current_price": "195.68"}],
-                "report_html": "<html>Daily</html>",
+                "report_html": "<html>Daily Fertilizer</html>",
             },
         )
-        upsert_top_picks(
-            "monthly",
-            {
-                "picks": [{"symbol": "MARI", "current_price": "675.65"}],
-                "report_html": "<html>Monthly</html>",
-            },
-        )
-        upsert_top_picks(
-            "yearly",
-            {
-                "picks": [{"symbol": "SYS", "current_price": "143.27"}],
-                "report_html": "<html>Yearly</html>",
-            },
-        )
-        rows = get_top_picks_rows()
-        assembled = _assemble_top_picks_from_rows(rows)
-        self.assertEqual(assembled["report_html"], "<html>Daily</html>")
-        self.assertEqual(assembled["daily_picks"][0]["symbol"], "EFERT")
-        self.assertEqual(assembled["monthly_picks"][0]["symbol"], "MARI")
-        self.assertEqual(assembled["yearly_picks"][0]["symbol"], "SYS")
+
+        cement_rows = get_top_picks_rows("daily", "Cement")
+        self.assertEqual(len(cement_rows), 1)
+        self.assertEqual(cement_rows[0].sector, "Cement")
+
+        cement_result = generate_top_picks("daily", "Cement")
+        self.assertEqual(cement_result["timeframe"], "daily")
+        self.assertEqual(cement_result["sector"], "Cement")
+        self.assertEqual(cement_result["picks"][0]["symbol"], "LUCK")
+
+        all_result = generate_top_picks("daily", "All")
+        self.assertEqual(all_result["sector"], "All")
+        symbols = {pick["symbol"] for pick in all_result["picks"]}
+        self.assertEqual(symbols, {"LUCK", "EFERT"})
 
     def test_news_and_events_with_metadata(self):
         replace_news_and_events(

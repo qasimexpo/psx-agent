@@ -4,6 +4,7 @@ PSX AI FastAPI backend — portfolio analysis (real-time) and DB-backed market r
 
 import logging
 from datetime import datetime
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -108,6 +109,7 @@ class ShareInput(BaseModel):
 
 class PortfolioRequest(BaseModel):
     shares: list[ShareInput] = Field(min_length=1, max_length=5)
+    timeframe: Literal["1d", "1W", "1M"] = "1d"
 
 
 class HoldingRow(BaseModel):
@@ -117,6 +119,8 @@ class HoldingRow(BaseModel):
     live_price: float | None = None
     pl_pkr: float | None = None
     rsi: float | None = None
+    s1: float | None = None
+    r1: float | None = None
     ai_action: str
 
 
@@ -140,10 +144,10 @@ class PickCard(BaseModel):
 
 
 class TopPicksResponse(BaseModel):
-    report_html: str
-    daily_picks: list[PickCard]
-    monthly_picks: list[PickCard]
-    yearly_picks: list[PickCard]
+    timeframe: str
+    sector: str
+    picks: list[PickCard]
+    report_html: str = ""
 
 
 class MarketIndexResponse(BaseModel):
@@ -166,6 +170,7 @@ class SymbolSearchResponse(BaseModel):
 
 class SingleStockRequest(BaseModel):
     symbol: str = Field(min_length=1, max_length=12)
+    timeframe: Literal["1d", "1W", "1M"] = "1d"
 
 
 class SingleStockAnalyzeResponse(BaseModel):
@@ -207,7 +212,7 @@ def health() -> dict[str, str]:
 def analyze_portfolio_endpoint(request: PortfolioRequest) -> AnalyzePortfolioResponse:
     try:
         shares = [share.model_dump() for share in request.shares]
-        result = analyze_portfolio(shares)
+        result = analyze_portfolio(shares, timeframe=request.timeframe)
         return AnalyzePortfolioResponse(**result)
     except ValueError as exc:
         message = str(exc)
@@ -227,10 +232,11 @@ def analyze_portfolio_endpoint(request: PortfolioRequest) -> AnalyzePortfolioRes
 
 @app.get("/top_picks", response_model=TopPicksResponse)
 def top_picks_endpoint(
-    category: str | None = Query(default=None, pattern="^(daily|monthly|yearly)$"),
+    category: str = Query(..., pattern="^(daily|monthly|yearly)$"),
+    sector: str = Query(default="All"),
 ) -> TopPicksResponse:
     try:
-        result = generate_top_picks(category)
+        result = generate_top_picks(category=category, sector=sector)
         return TopPicksResponse(**result)
     except DatabaseUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -313,7 +319,7 @@ def symbols_endpoint(q: str = "", limit: int = 8) -> SymbolSearchResponse:
 @app.post("/analyze_single_stock", response_model=SingleStockAnalyzeResponse)
 def analyze_single_stock_endpoint(request: SingleStockRequest) -> SingleStockAnalyzeResponse:
     try:
-        result = analyze_single_stock(request.symbol)
+        result = analyze_single_stock(request.symbol, timeframe=request.timeframe)
         return SingleStockAnalyzeResponse(**result)
     except ValueError as exc:
         message = str(exc)

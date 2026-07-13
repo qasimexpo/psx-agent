@@ -8,6 +8,7 @@ from ai_agent import (
     _enforce_live_prices_on_pick_list,
     _expand_live_prices_for_result,
     _parse_pick_price,
+    apply_live_prices_to_sector_picks,
     apply_live_prices_to_top_picks_result,
     collect_symbols_from_top_picks_result,
 )
@@ -88,6 +89,23 @@ class TestExpandLivePrices(unittest.TestCase):
         expanded = _expand_live_prices_for_result(result, {"EFERT": 195.68})
         self.assertEqual(expanded["EFERT"], 195.68)
         self.assertEqual(expanded["MARI"], 675.65)
+
+
+class TestSectorPicksLivePrices(unittest.TestCase):
+    def test_apply_live_prices_to_sector_picks(self):
+        result = {
+            "picks": [
+                {"symbol": "LUCK", "current_price": "800.0"},
+                {"symbol": "DGKC", "current_price": "120.0"},
+            ],
+            "report_html": "<html></html>",
+        }
+        updated = apply_live_prices_to_sector_picks(
+            result,
+            {"LUCK": 950.0, "DGKC": 125.5},
+        )
+        self.assertEqual(updated["picks"][0]["current_price"], "950.00")
+        self.assertEqual(updated["picks"][1]["current_price"], "125.50")
 
 
 if __name__ == "__main__":

@@ -3,8 +3,10 @@
 import { FormEvent, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Plus, Trash2 } from "lucide-react";
 import SymbolAutocomplete from "@/components/SymbolAutocomplete";
+import TimeframeSelector from "@/components/TimeframeSelector";
 import WhatsAppCta from "@/components/WhatsAppCta";
 import { analyzePortfolio, type AnalyzeResult, type Share } from "@/lib/api";
+import type { AnalysisTimeframe } from "@/lib/timeframes";
 
 type ShareRow = {
   symbol: string;
@@ -30,6 +32,7 @@ export default function PortfolioForm({
   onError,
 }: PortfolioFormProps) {
   const [rows, setRows] = useState<ShareRow[]>([emptyRow()]);
+  const [timeframe, setTimeframe] = useState<AnalysisTimeframe>("1d");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -81,7 +84,7 @@ export default function PortfolioForm({
     onLoadingChange(true, shares.map((share) => share.symbol));
 
     try {
-      const result = await analyzePortfolio(shares);
+      const result = await analyzePortfolio(shares, timeframe);
       onReport(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Analysis failed.";
@@ -97,10 +100,20 @@ export default function PortfolioForm({
     <section id="analyze" className="scroll-mt-20 px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg sm:p-8">
-          <h2 className="text-2xl font-bold text-navy-950">Portfolio Input</h2>
-          <p className="mt-2 text-slate-600">
-            Add up to 5 PSX holdings. Live prices are fetched automatically by our AI.
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-navy-950">Portfolio Input</h2>
+              <p className="mt-2 text-slate-600">
+                Add up to 5 PSX holdings. Live prices are fetched automatically by our AI.
+              </p>
+            </div>
+            <TimeframeSelector
+              value={timeframe}
+              onChange={setTimeframe}
+              disabled={submitting}
+              className="w-full sm:w-auto"
+            />
+          </div>
 
           {error && (
             <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">

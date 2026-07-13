@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import Script from "next/script";
+import JsonLd from "@/components/JsonLd";
 import { getAdsenseClientId } from "@/lib/adsense";
 import "./globals.css";
 
@@ -12,11 +13,17 @@ const dmSans = DM_Sans({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0B132B",
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.smartsarmaya.com"),
   title: "SmartSarmaya | AI Stock Advisor for PSX & KSE-100",
   description:
-    "SmartSarmaya is an AI Stock Advisor for PSX (Pakistan Stock Exchange) and KSE-100 investors. Get live portfolio analysis, risk alerts, and actionable buy/sell guidance.",
+    "SmartSarmaya is an AI-powered educational tool for Pakistan Stock Exchange (PSX) and KSE-100 investors. Explore portfolio analysis, risk insights, and market data for learning purposes only — not financial advice.",
   keywords: [
     "PSX",
     "Pakistan Stock Exchange",
@@ -28,13 +35,22 @@ export const metadata: Metadata = {
     "SmartSarmaya",
   ],
   authors: [{ name: "SmartSarmaya" }],
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+    shortcut: "/favicon.ico",
+  },
   alternates: {
     canonical: "/",
   },
   openGraph: {
     title: "SmartSarmaya | AI Stock Advisor for PSX & KSE-100",
     description:
-      "Track PSX and KSE-100 with AI-powered portfolio audits, risk insights, and smart action plans for Pakistan Stock Exchange investors.",
+      "An AI-powered educational tool for the Pakistan Stock Exchange (PSX). Portfolio analysis, risk insights, and market data for learning purposes only — not financial advice.",
     url: "https://www.smartsarmaya.com",
     siteName: "SmartSarmaya",
     locale: "en_US",
@@ -52,7 +68,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "SmartSarmaya | AI Stock Advisor for PSX & KSE-100",
     description:
-      "AI-powered portfolio analysis and risk insights for PSX and KSE-100 investors.",
+      "An AI-powered educational tool for the Pakistan Stock Exchange (PSX). Portfolio analysis and risk insights for learning purposes only.",
     images: ["/images/banner 1.jpg"],
   },
 };
@@ -74,6 +90,7 @@ export default function RootLayout({
         )}
       </head>
       <body className="min-h-full flex flex-col font-sans antialiased">
+        <JsonLd />
         <Script
           id="gtag-src"
           src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`}

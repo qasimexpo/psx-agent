@@ -63,23 +63,41 @@ export async function exportReportToPdf(
     formatPrice(row.live_price),
     formatPl(row.pl_pkr),
     row.rsi !== null ? row.rsi.toFixed(2) : "N/A",
+    formatPrice(row.s1),
+    formatPrice(row.r1),
     row.ai_action,
   ]);
 
   autoTable(pdf, {
     startY: 38,
-    head: [["Symbol", "Qty", "Buy Price", "Live Price", "P/L (PKR)", "RSI", "AI Action"]],
+    head: [["Symbol", "Qty", "Buy", "Live", "P/L", "RSI", "S1", "R1", "Action"]],
     body: tableBody,
     margin: { left: margin, right: margin },
+    styles: {
+      fontSize: 7,
+      cellPadding: 1.5,
+      overflow: "linebreak",
+    },
     headStyles: {
       fillColor: [241, 245, 249],
       textColor: [11, 19, 43],
       fontStyle: "bold",
-      fontSize: 8,
+      fontSize: 7,
     },
     bodyStyles: {
-      fontSize: 8,
+      fontSize: 7,
       textColor: [30, 41, 59],
+    },
+    columnStyles: {
+      0: { cellWidth: 14 },
+      1: { cellWidth: 10 },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 16 },
+      4: { cellWidth: 20 },
+      5: { cellWidth: 12 },
+      6: { cellWidth: 16 },
+      7: { cellWidth: 16 },
+      8: { cellWidth: 28 },
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],

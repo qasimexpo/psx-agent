@@ -13,6 +13,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from database import (
+    TOP_PICK_SECTORS,
+    TOP_PICK_TIMEFRAMES,
     init_db,
     replace_news_and_events,
     upsert_ticker_rows,
@@ -23,8 +25,9 @@ from fetchers import (
     fetch_global_finance_news,
     fetch_kse100_ticker_rows_for_db,
     fetch_pakistan_news,
+    format_news_for_prompt,
 )
-from service import generate_top_picks_for_cron
+from service import generate_sector_top_picks_for_cron
 
 logger = logging.getLogger("smartsarmaya.cron")
 PKT = ZoneInfo("Asia/Karachi")
@@ -108,23 +111,37 @@ def update_tickers_and_news() -> None:
 
 
 def update_top_picks() -> None:
-    """Generate fresh top picks via Groq and UPSERT into Neon DB."""
-    logger.info("Starting daily top picks update at %s PKT.", datetime.now(PKT))
+    """Generate sector-specific top picks for each timeframe and UPSERT into Neon DB."""
+    logger.info("Starting daily sector top picks update at %s PKT.", datetime.now(PKT))
     init_db()
 
-    result = generate_top_picks_for_cron()
-    report_html = result.get("report_html", "")
-    for category, picks_key in (
-        ("daily", "daily_picks"),
-        ("monthly", "monthly_picks"),
-        ("yearly", "yearly_picks"),
-    ):
-        payload = {
-            "picks": result.get(picks_key, []),
-            "report_html": report_html,
-        }
-        upsert_top_picks(category, payload)
-        logger.info("Upserted top picks for category=%s (%s picks).", category, len(payload["picks"]))
+    news = fetch_pakistan_news(limit=5)
+    news_text = format_news_for_prompt(news)
+
+    for timeframe in TOP_PICK_TIMEFRAMES:
+        for sector in TOP_PICK_SECTORS:
+            try:
+                result = generate_sector_top_picks_for_cron(
+                    timeframe,
+                    sector,
+                    news=news,
+                    news_text=news_text,
+                )
+                payload = {
+                    "picks": result.get("picks", []),
+                    "report_html": result.get("report_html", ""),
+                }
+                upsert_top_picks(timeframe, sector, payload)
+                logger.info(
+                    "Upserted top picks for %s/%s (%s picks).",
+                    timeframe,
+                    sector,
+                    len(payload["picks"]),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to update top picks for %s/%s", timeframe, sector
+                )
 
 
 def main(argv: list[str] | None = None) -> int:

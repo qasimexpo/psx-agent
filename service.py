@@ -12,20 +12,20 @@ from dotenv import load_dotenv
 
 from ai_agent import (
     SINGLE_STOCK_CACHE_TTL_SECONDS,
-    TOP_PICKS_COUNT,
-    apply_live_prices_to_top_picks_result,
+    apply_live_prices_to_sector_picks,
     build_holdings_from_rows,
     build_risk_summary,
-    collect_symbols_from_top_picks_result,
     generate_portfolio_html,
+    generate_sector_picks_with_live_prices,
     generate_single_stock_deep_dive,
-    generate_top_picks_with_live_prices,
     get_ai_cached,
-    select_top_pick_symbols,
+    select_sector_pick_symbols,
     set_ai_cached,
 )
 from database import (
     DatabaseUnavailableError,
+    TOP_PICK_SECTOR_ALL,
+    TOP_PICK_SECTORS,
     get_all_tickers,
     get_news_and_events,
     get_top_picks_rows,
@@ -51,7 +51,7 @@ from fetchers import (
 DEFAULT_MODEL = "llama-3.1-8b-instant"
 PKT = ZoneInfo("Asia/Karachi")
 logger = logging.getLogger("smartsarmaya.service")
-TOP_PICKS_FALLBACK_SYMBOLS = ["OGDC", "PPL", "LUCK", "HUBC", "MEBL", "ENGRO"]
+TOP_PICKS_ALL_CAP = 10
 
 
 def load_api_config() -> dict[str, str | None]:
@@ -95,16 +95,23 @@ def _resolve_live_prices_for_symbols(symbols: list[str]) -> dict[str, float | No
 
 
 def _refresh_top_picks_live_prices(result: dict[str, Any]) -> dict[str, Any]:
-    """Re-apply fresh PSX prices to all pick horizons."""
-    symbols = collect_symbols_from_top_picks_result(result)
+    """Re-apply fresh PSX prices to sector pick list."""
+    picks = result.get("picks")
+    if not isinstance(picks, list) or not picks:
+        return result
+    symbols = [
+        str(pick.get("symbol", "")).strip().upper()
+        for pick in picks
+        if str(pick.get("symbol", "")).strip()
+    ]
     if not symbols:
         return result
     try:
         live_prices = _resolve_live_prices_for_symbols(symbols)
     except Exception as exc:
-        logger.warning("Failed to refresh top-picks live prices: %s", exc)
+        logger.warning("Failed to refresh sector top-picks live prices: %s", exc)
         return result
-    return apply_live_prices_to_top_picks_result(result, live_prices)
+    return apply_live_prices_to_sector_picks(result, live_prices)
 
 
 def _parse_change_float(change_value: str | float | int) -> float:
@@ -126,23 +133,21 @@ def _ticker_row_to_api(row: Any) -> dict[str, Any]:
     }
 
 
-def _assemble_top_picks_from_rows(rows: list[Any]) -> dict[str, Any]:
-    by_category = {row.category: row.ai_response_json for row in rows}
-    daily = by_category.get("daily", {})
-    monthly = by_category.get("monthly", {})
-    yearly = by_category.get("yearly", {})
-    report_html = (
-        daily.get("report_html")
-        or monthly.get("report_html")
-        or yearly.get("report_html")
-        or ""
-    )
-    return {
-        "report_html": report_html,
-        "daily_picks": daily.get("picks", []),
-        "monthly_picks": monthly.get("picks", []),
-        "yearly_picks": yearly.get("picks", []),
-    }
+def _aggregate_sector_picks(rows: list[Any], *, cap: int = TOP_PICKS_ALL_CAP) -> list[dict[str, Any]]:
+    """Merge picks from multiple sector rows, dedupe by symbol."""
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        payload = row.ai_response_json or {}
+        for pick in payload.get("picks", []):
+            symbol = str(pick.get("symbol", "")).strip().upper()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            merged.append(pick)
+            if len(merged) >= cap:
+                return merged
+    return merged
 
 
 def _db_ticker_price_map() -> dict[str, float]:
@@ -163,7 +168,10 @@ def _db_ticker_price_map() -> dict[str, float]:
     return prices
 
 
-def _build_portfolio_market_cache(symbols: set[str]) -> dict[str, Any]:
+def _build_portfolio_market_cache(
+    symbols: set[str],
+    timeframe: str = "1d",
+) -> dict[str, Any]:
     """Build portfolio market cache using DB prices first, then live fallbacks."""
     db_prices = _db_ticker_price_map()
     missing = sorted(symbol for symbol in symbols if symbol not in db_prices)
@@ -192,26 +200,23 @@ def _build_portfolio_market_cache(symbols: set[str]) -> dict[str, Any]:
             "error": None if price is not None else "Price unavailable",
         }
 
-    symbols_missing_price = {
-        symbol for symbol in symbols if technicals[symbol]["current_price"] is None
-    }
-    if symbols_missing_price:
-        try:
-            tv_indicators = fetch_market_indicators(symbols_missing_price)
-            for symbol in symbols_missing_price:
-                tv = tv_indicators.get(symbol, {})
-                merged = dict(technicals[symbol])
-                if tv.get("current_price") is not None:
-                    merged["current_price"] = tv.get("current_price")
-                    merged["error"] = tv.get("error")
-                for field in ("rsi", "volume", "r1", "s1"):
-                    if tv.get(field) is not None:
-                        merged[field] = tv.get(field)
-                if merged["current_price"] is not None:
-                    merged["error"] = None
-                technicals[symbol] = merged
-        except Exception as exc:
-            logger.warning("TradingView indicator enrichment skipped: %s", exc)
+    try:
+        tv_indicators = fetch_market_indicators(symbols, timeframe=timeframe)
+        for symbol in symbols:
+            tv = tv_indicators.get(symbol, {})
+            merged = dict(technicals[symbol])
+            if merged["current_price"] is None and tv.get("current_price") is not None:
+                merged["current_price"] = tv.get("current_price")
+            for field in ("rsi", "volume", "r1", "s1", "support_1", "resistance_1"):
+                if tv.get(field) is not None:
+                    merged[field] = tv.get(field)
+            if merged["current_price"] is not None:
+                merged["error"] = tv.get("error")
+            elif tv.get("error"):
+                merged["error"] = tv.get("error")
+            technicals[symbol] = merged
+    except Exception as exc:
+        logger.warning("TradingView indicator enrichment skipped: %s", exc)
 
     return {
         "technicals": technicals,
@@ -220,7 +225,10 @@ def _build_portfolio_market_cache(symbols: set[str]) -> dict[str, Any]:
     }
 
 
-def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
+def analyze_portfolio(
+    shares: list[dict[str, Any]],
+    timeframe: str = "1d",
+) -> dict[str, Any]:
     """Fetch market data for the given shares and return structured AI report data."""
     config = load_api_config()
     portfolio = shares_to_portfolio(shares)
@@ -229,7 +237,7 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
 
     report_date = _report_date()
     symbols = set(portfolio.keys())
-    cache = _build_portfolio_market_cache(symbols)
+    cache = _build_portfolio_market_cache(symbols, timeframe=timeframe)
     enriched_rows, technical_text, portfolio_summary, client_psx_events = (
         build_client_report_data(portfolio, cache)
     )
@@ -250,6 +258,7 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
         news_text=news_text,
         psx_events=client_psx_events,
         gemini_api_key=config["gemini_api_key"],
+        timeframe=timeframe,
     )
 
     return {
@@ -260,47 +269,49 @@ def analyze_portfolio(shares: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def generate_top_picks_for_cron() -> dict[str, Any]:
-    """Live Groq generation for cron job — not used by public GET endpoints."""
+def generate_sector_top_picks_for_cron(
+    timeframe: str,
+    sector: str,
+    *,
+    news: list[dict[str, str]] | None = None,
+    news_text: str | None = None,
+) -> dict[str, Any]:
+    """Live AI generation for one timeframe+sector cron iteration."""
     config = load_api_config()
     report_date = _report_date()
-    news = fetch_pakistan_news(limit=5)
-    news_text = format_news_for_prompt(news)
-    try:
-        symbols = select_top_pick_symbols(
-            groq_api_key=config["groq_api_key"],
-            model_name=config["model_name"],
-            report_date=report_date,
-            news_text=news_text,
-            gemini_api_key=config["gemini_api_key"],
-        )
-    except Exception as exc:
-        logger.exception("Top-picks symbol selection failed: %s", exc)
-        symbols = TOP_PICKS_FALLBACK_SYMBOLS.copy()
-        logger.warning("Using fallback top-pick symbols due to AI quota/error: %s", symbols)
-    logger.info("AI symbol selection raw result: %s", symbols)
-    cleaned_symbols = normalize_psx_symbols(symbols)
-    if len(cleaned_symbols) < TOP_PICKS_COUNT:
-        logger.warning(
-            "Top-pick symbol selection produced fewer than %s valid symbols: %s. "
-            "Falling back to defaults.",
-            TOP_PICKS_COUNT,
-            cleaned_symbols,
-        )
-        cleaned_symbols = TOP_PICKS_FALLBACK_SYMBOLS.copy()
+    if news is None:
+        news = fetch_pakistan_news(limit=5)
+    if news_text is None:
+        news_text = format_news_for_prompt(news)
 
-    cleaned_symbols = cleaned_symbols[:TOP_PICKS_COUNT]
-    try:
-        live_prices = _resolve_live_prices_for_symbols(cleaned_symbols)
-    except Exception as exc:
-        logger.exception("Top-picks live price fetch failed: %s", exc)
-        live_prices = {symbol: None for symbol in cleaned_symbols}
-    logger.info("Fetched Live Prices: %s", live_prices)
-
-    result = generate_top_picks_with_live_prices(
+    symbols = select_sector_pick_symbols(
         groq_api_key=config["groq_api_key"],
         model_name=config["model_name"],
         report_date=report_date,
+        sector=sector,
+        timeframe=timeframe,
+        news_text=news_text,
+        gemini_api_key=config["gemini_api_key"],
+    )
+
+    cleaned_symbols = normalize_psx_symbols(symbols)
+    if len(cleaned_symbols) < 2:
+        raise ValueError(
+            f"Sector symbol selection produced insufficient symbols for {sector}/{timeframe}."
+        )
+
+    try:
+        live_prices = _resolve_live_prices_for_symbols(cleaned_symbols)
+    except Exception as exc:
+        logger.exception("Sector top-picks live price fetch failed: %s", exc)
+        live_prices = {symbol: None for symbol in cleaned_symbols}
+
+    result = generate_sector_picks_with_live_prices(
+        groq_api_key=config["groq_api_key"],
+        model_name=config["model_name"],
+        report_date=report_date,
+        sector=sector,
+        timeframe=timeframe,
         news=news,
         news_text=news_text,
         recommended_symbols=cleaned_symbols,
@@ -310,11 +321,17 @@ def generate_top_picks_for_cron() -> dict[str, Any]:
     return _refresh_top_picks_live_prices(result)
 
 
-def generate_top_picks(category: str | None = None) -> dict[str, Any]:
-    """Read pre-generated top picks from Neon DB."""
+def generate_top_picks(category: str, sector: str = TOP_PICK_SECTOR_ALL) -> dict[str, Any]:
+    """Read pre-generated sector top picks from Neon DB."""
+    sector_clean = sector.strip()
+    if sector_clean != TOP_PICK_SECTOR_ALL and sector_clean not in TOP_PICK_SECTORS:
+        raise ValueError(f"Invalid sector: {sector}")
+
     try:
-        rows = get_top_picks_rows(category)
+        rows = get_top_picks_rows(category, sector_clean)
     except DatabaseUnavailableError:
+        raise
+    except ValueError:
         raise
     except Exception as exc:
         logger.exception("Failed to read top picks from database: %s", exc)
@@ -325,26 +342,32 @@ def generate_top_picks(category: str | None = None) -> dict[str, Any]:
             "Top picks are not available yet. Please try again after the daily update runs."
         )
 
-    if category:
-        row = rows[0]
-        payload = row.ai_response_json or {}
-        return {
-            "report_html": payload.get("report_html", ""),
-            "daily_picks": payload.get("picks", []) if category == "daily" else [],
-            "monthly_picks": payload.get("picks", []) if category == "monthly" else [],
-            "yearly_picks": payload.get("picks", []) if category == "yearly" else [],
-        }
+    if sector_clean == TOP_PICK_SECTOR_ALL:
+        picks = _aggregate_sector_picks(rows)
+        report_html = next(
+            (
+                (row.ai_response_json or {}).get("report_html", "")
+                for row in rows
+                if (row.ai_response_json or {}).get("report_html")
+            ),
+            "",
+        )
+    else:
+        payload = rows[0].ai_response_json or {}
+        picks = payload.get("picks", [])
+        report_html = payload.get("report_html", "")
 
-    assembled = _assemble_top_picks_from_rows(rows)
-    if not any(
-        [
-            assembled["daily_picks"],
-            assembled["monthly_picks"],
-            assembled["yearly_picks"],
-        ]
-    ):
-        raise ValueError("Top picks data in database is incomplete.")
-    return assembled
+    if not picks:
+        raise ValueError(
+            f"Top picks data for {category}/{sector_clean} is incomplete."
+        )
+
+    return {
+        "timeframe": category.strip().lower(),
+        "sector": sector_clean,
+        "picks": picks,
+        "report_html": report_html,
+    }
 
 
 def get_news_and_events_api(
@@ -410,13 +433,13 @@ def get_symbol_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
     return search_psx_symbols(query, limit=limit)
 
 
-def analyze_single_stock(symbol: str) -> dict[str, str]:
+def analyze_single_stock(symbol: str, timeframe: str = "1d") -> dict[str, str]:
     """Analyze a single PSX stock with live data and Groq structured deep-dive."""
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise ValueError("Symbol is required.")
 
-    cache_key = f"single_stock:{normalized_symbol}"
+    cache_key = f"single_stock:{normalized_symbol}:{timeframe}"
     cached = get_ai_cached(cache_key, SINGLE_STOCK_CACHE_TTL_SECONDS)
     if cached is not None:
         logger.info("Serving single-stock analysis from AI cache (%s).", cache_key)
@@ -424,7 +447,10 @@ def analyze_single_stock(symbol: str) -> dict[str, str]:
 
     config = load_api_config()
     market = fetch_live_prices_for_symbols([normalized_symbol]).get(normalized_symbol)
-    indicators = fetch_market_indicators({normalized_symbol}).get(normalized_symbol, {})
+    indicators = fetch_market_indicators(
+        {normalized_symbol},
+        timeframe=timeframe,
+    ).get(normalized_symbol, {})
     current_price = market if market is not None else indicators.get("current_price")
     if current_price is None:
         try:
@@ -460,6 +486,7 @@ def analyze_single_stock(symbol: str) -> dict[str, str]:
         resistance_1=resistance_1,
         news_text=news_text,
         gemini_api_key=config["gemini_api_key"],
+        timeframe=timeframe,
     )
     set_ai_cached(cache_key, result)
     return result

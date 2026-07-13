@@ -1,3 +1,7 @@
+import type { AnalysisTimeframe } from "@/lib/timeframes";
+import type { TopPickSector } from "@/lib/topPickSectors";
+import { TOP_PICK_SECTOR_ALL } from "@/lib/topPickSectors";
+
 export type Share = {
   symbol: string;
   buy_price: number;
@@ -11,8 +15,12 @@ export type HoldingRow = {
   live_price: number | null;
   pl_pkr: number | null;
   rsi: number | null;
+  s1: number | null;
+  r1: number | null;
   ai_action: string;
 };
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type AnalyzeResult = {
   report_html: string;
@@ -34,11 +42,13 @@ export type PickCard = {
 };
 
 export type TopPicksResult = {
-  report_html: string;
-  daily_picks: PickCard[];
-  monthly_picks: PickCard[];
-  yearly_picks: PickCard[];
+  timeframe: string;
+  sector: string;
+  picks: PickCard[];
+  report_html?: string;
 };
+
+export type PickHorizon = "daily" | "monthly" | "yearly";
 
 export type NewsItem = {
   title: string;
@@ -59,7 +69,6 @@ export type NewsAndEventsItem = {
   region?: string | null;
 };
 
-export type PickHorizon = "daily" | "monthly" | "yearly";
 
 export type MarketIndexResult = {
   name: string;
@@ -100,7 +109,6 @@ export type DividendCalendarItem = {
   date: string;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 15000;
 const TICKER_TIMEOUT_MS = 10000;
 const AI_ANALYSIS_TIMEOUT_MS = 180000;
@@ -159,22 +167,28 @@ async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
-export async function analyzePortfolio(shares: Share[]): Promise<AnalyzeResult> {
+export async function analyzePortfolio(
+  shares: Share[],
+  timeframe: AnalysisTimeframe = "1d",
+): Promise<AnalyzeResult> {
   return apiFetch<AnalyzeResult>(
     "/analyze_portfolio",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shares }),
+      body: JSON.stringify({ shares, timeframe }),
     },
     AI_ANALYSIS_TIMEOUT_MS,
     "Portfolio analysis is taking longer than expected. Please wait and try again.",
   );
 }
 
-export async function fetchTopPicks(category?: PickHorizon): Promise<TopPicksResult> {
-  const params = category ? `?category=${category}` : "";
-  return apiFetch<TopPicksResult>(`/top_picks${params}`);
+export async function fetchTopPicks(
+  category: PickHorizon,
+  sector: TopPickSector = TOP_PICK_SECTOR_ALL,
+): Promise<TopPicksResult> {
+  const params = new URLSearchParams({ category, sector });
+  return apiFetch<TopPicksResult>(`/top_picks?${params}`);
 }
 
 export function toNewsItem(item: NewsAndEventsItem): NewsItem {
@@ -221,13 +235,14 @@ export async function searchSymbols(
 
 export async function analyzeSingleStock(
   symbol: string,
+  timeframe: AnalysisTimeframe = "1d",
 ): Promise<SingleStockAnalyzeResult> {
   return apiFetch<SingleStockAnalyzeResult>(
     "/analyze_single_stock",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol }),
+      body: JSON.stringify({ symbol, timeframe }),
     },
     AI_ANALYSIS_TIMEOUT_MS,
     "Stock analysis is taking longer than expected. Please wait and try again.",

@@ -15,11 +15,15 @@ def main() -> int:
     shares = [
         {"symbol": "OGDC", "buy_price": 300.0, "quantity": 1000},
         {"symbol": "LUCK", "buy_price": 450.0, "quantity": 500},
+        {"symbol": "FAKE", "buy_price": 100.0, "quantity": 100},
     ]
     portfolio = shares_to_portfolio(shares)
-    assert len(portfolio) == 2
+    assert len(portfolio) == 3
     assert portfolio["OGDC"]["buy_price"] == 300.0
-    print(f"Parsed {len(portfolio)} holding(s)")
+    assert portfolio["OGDC"]["sector"] == "E&P"
+    assert portfolio["LUCK"]["sector"] == "Cement"
+    assert portfolio["FAKE"]["sector"] == "General"
+    print(f"Parsed {len(portfolio)} holding(s) with sector mapping")
 
     print("=== Test 2: Market cache ===")
     symbols = set(portfolio.keys())
@@ -55,7 +59,10 @@ def main() -> int:
     )
     assert "Assalamu Alaikum" in report["html_email"]
     assert "Investor" in report["html_email"]
-    print("  Portfolio fallback OK")
+    assert "Top 5" not in report["html_email"]
+    assert "News Summary" not in report["html_email"]
+    assert "Dividends" not in report["html_email"]
+    print("  Portfolio fallback OK (no redundant sections)")
 
     print("=== Test 5: Fallback top picks HTML ===")
     top_picks_html = _build_fallback_top_picks_html("08 July 2026", [])

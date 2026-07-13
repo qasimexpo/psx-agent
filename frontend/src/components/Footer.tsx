@@ -23,6 +23,12 @@ export default function Footer() {
 
           <nav className="flex flex-wrap gap-4 text-sm">
             <Link
+              href="/about"
+              className="text-slate-300 transition hover:text-emerald-400"
+            >
+              About
+            </Link>
+            <Link
               href="/privacy-policy"
               className="text-slate-300 transition hover:text-emerald-400"
             >

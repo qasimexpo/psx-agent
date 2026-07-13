@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Generator, Iterator
 
 from dotenv import load_dotenv
-from sqlalchemy import DateTime, Float, Integer, String, Text, create_engine, delete, select, text
+from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint, create_engine, delete, inspect, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -20,7 +20,21 @@ from sqlalchemy.types import JSON
 
 logger = logging.getLogger("smartsarmaya.database")
 
-TOP_PICK_CATEGORIES = ("daily", "monthly", "yearly")
+TOP_PICK_TIMEFRAMES = ("daily", "monthly", "yearly")
+TOP_PICK_SECTOR_ALL = "All"
+TOP_PICK_SECTORS = (
+    "Banking (Islamic)",
+    "Cement",
+    "Energy (E&P)",
+    "Power Generation",
+    "Technology",
+    "Fertilizer",
+    "Pharmaceuticals",
+    "Automobile",
+    "Textile",
+    "Food & Personal Care",
+)
+TOP_PICKS_PER_SECTOR = 3
 NEWS_EVENT_TYPES = ("news", "dividend", "board_meeting")
 
 
@@ -47,8 +61,13 @@ class TickerData(Base):
 
 class TopPicks(Base):
     __tablename__ = "top_picks"
+    __table_args__ = (
+        UniqueConstraint("timeframe", "sector", name="uq_top_picks_timeframe_sector"),
+    )
 
-    category: Mapped[str] = mapped_column(String(16), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timeframe: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    sector: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     ai_response_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     last_updated: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
@@ -164,11 +183,26 @@ def _migrate_neon_columns() -> None:
                 logger.debug("Migration skipped or already applied (%s): %s", stmt, exc)
 
 
+def _migrate_top_picks_v6() -> None:
+    """Drop legacy category-based top_picks table and recreate V6 schema."""
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "top_picks" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("top_picks")}
+    if "category" in columns and "timeframe" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE top_picks"))
+        logger.info("Dropped legacy top_picks table for V6 migration.")
+        Base.metadata.create_all(bind=engine, tables=[TopPicks.__table__])
+
+
 def init_db() -> None:
     """Create tables if they do not exist."""
     try:
         Base.metadata.create_all(bind=get_engine())
         _migrate_neon_columns()
+        _migrate_top_picks_v6()
         logger.info("Database tables initialized.")
     except DatabaseUnavailableError:
         logger.warning("DATABASE_URL not set; skipping init_db().")
@@ -229,23 +263,41 @@ def upsert_ticker_rows(rows: list[dict[str, Any]]) -> int:
     return len(payload)
 
 
-def upsert_top_picks(category: str, json_payload: dict[str, Any]) -> None:
-    category = category.strip().lower()
-    if category not in TOP_PICK_CATEGORIES:
-        raise ValueError(f"Invalid top picks category: {category}")
+def _normalize_timeframe(timeframe: str) -> str:
+    normalized = timeframe.strip().lower()
+    if normalized not in TOP_PICK_TIMEFRAMES:
+        raise ValueError(f"Invalid top picks timeframe: {timeframe}")
+    return normalized
+
+
+def _normalize_sector(sector: str) -> str:
+    cleaned = sector.strip()
+    if cleaned == TOP_PICK_SECTOR_ALL:
+        return TOP_PICK_SECTOR_ALL
+    if cleaned not in TOP_PICK_SECTORS:
+        raise ValueError(f"Invalid top picks sector: {sector}")
+    return cleaned
+
+
+def upsert_top_picks(timeframe: str, sector: str, json_payload: dict[str, Any]) -> None:
+    timeframe = _normalize_timeframe(timeframe)
+    sector = _normalize_sector(sector)
+    if sector == TOP_PICK_SECTOR_ALL:
+        raise ValueError("Cannot upsert top picks for sector 'All'.")
 
     now = _utc_now()
     with session_scope() as session:
         dialect = session.bind.dialect.name if session.bind else ""
         values = {
-            "category": category,
+            "timeframe": timeframe,
+            "sector": sector,
             "ai_response_json": json_payload,
             "last_updated": now,
         }
         if dialect == "postgresql":
             stmt = pg_insert(TopPicks).values(values)
             stmt = stmt.on_conflict_do_update(
-                index_elements=[TopPicks.category],
+                index_elements=["timeframe", "sector"],
                 set_={
                     "ai_response_json": stmt.excluded.ai_response_json,
                     "last_updated": stmt.excluded.last_updated,
@@ -253,12 +305,55 @@ def upsert_top_picks(category: str, json_payload: dict[str, Any]) -> None:
             )
             session.execute(stmt)
         else:
-            existing = session.get(TopPicks, category)
+            existing = session.scalars(
+                select(TopPicks).where(
+                    TopPicks.timeframe == timeframe,
+                    TopPicks.sector == sector,
+                )
+            ).first()
             if existing:
                 existing.ai_response_json = json_payload
                 existing.last_updated = now
             else:
                 session.add(TopPicks(**values))
+
+
+def get_top_picks_row(timeframe: str, sector: str) -> TopPicks | None:
+    timeframe = _normalize_timeframe(timeframe)
+    sector = _normalize_sector(sector)
+    if sector == TOP_PICK_SECTOR_ALL:
+        raise ValueError("Use get_top_picks_rows for sector 'All'.")
+    with session_scope() as session:
+        return session.scalars(
+            select(TopPicks).where(
+                TopPicks.timeframe == timeframe,
+                TopPicks.sector == sector,
+            )
+        ).first()
+
+
+def get_top_picks_rows(
+    timeframe: str,
+    sector: str | None = TOP_PICK_SECTOR_ALL,
+) -> list[TopPicks]:
+    timeframe = _normalize_timeframe(timeframe)
+    with session_scope() as session:
+        if sector and sector.strip() != TOP_PICK_SECTOR_ALL:
+            sector = _normalize_sector(sector)
+            row = session.scalars(
+                select(TopPicks).where(
+                    TopPicks.timeframe == timeframe,
+                    TopPicks.sector == sector,
+                )
+            ).first()
+            return [row] if row else []
+        return list(
+            session.scalars(
+                select(TopPicks)
+                .where(TopPicks.timeframe == timeframe)
+                .order_by(TopPicks.sector)
+            ).all()
+        )
 
 
 def replace_news_and_events(records: list[dict[str, Any]]) -> int:
@@ -289,18 +384,6 @@ def replace_news_and_events(records: list[dict[str, Any]]) -> int:
 def get_all_tickers() -> list[TickerData]:
     with session_scope() as session:
         return list(session.scalars(select(TickerData).order_by(TickerData.symbol)).all())
-
-
-def get_top_picks_rows(category: str | None = None) -> list[TopPicks]:
-    with session_scope() as session:
-        if category:
-            row = session.get(TopPicks, category.strip().lower())
-            return [row] if row else []
-        return list(
-            session.scalars(
-                select(TopPicks).where(TopPicks.category.in_(TOP_PICK_CATEGORIES))
-            ).all()
-        )
 
 
 def get_news_and_events(

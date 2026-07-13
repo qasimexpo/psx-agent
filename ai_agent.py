@@ -28,6 +28,22 @@ GROQ_MODEL_ALIASES = {
 logger = logging.getLogger("smartsarmaya.ai")
 
 TOP_PICKS_COUNT = 6
+SECTOR_PICKS_COUNT = 3
+TIMEFRAME_PICK_LABELS = {"daily": "Daily", "monthly": "Monthly", "yearly": "Yearly"}
+
+SECTOR_FALLBACK_SYMBOLS: dict[str, list[str]] = {
+    "Banking (Islamic)": ["MEBL", "BAHL", "AKBL"],
+    "Cement": ["LUCK", "DGKC", "MLCF"],
+    "Energy (E&P)": ["OGDC", "PPL", "MARI"],
+    "Power Generation": ["HUBC", "KAPCO", "NCPL"],
+    "Technology": ["SYS", "TRG", "AVN"],
+    "Fertilizer": ["EFERT", "FFC", "FATIMA"],
+    "Pharmaceuticals": ["SEARL", "GLAXO", "AGP"],
+    "Automobile": ["INDU", "PSMC", "HCAR"],
+    "Textile": ["GATM", "NML", "NCL"],
+    "Food & Personal Care": ["ENGRO", "UNITY", "NESTLE"],
+}
+TIMEFRAME_LABELS = {"1d": "Daily", "1W": "Weekly", "1M": "Monthly"}
 
 _AI_RESPONSE_CACHE: dict[str, tuple[Any, float]] = {}
 TOP_PICKS_CACHE_KEY = "top_picks_daily_v3"
@@ -173,56 +189,78 @@ SYSTEM_PROMPT_TEMPLATE = """You are the Chief Risk Officer (CRO) of an instituti
 
 Your role is to protect capital, monitor sector concentration, track CGT holding periods, and deliver actionable risk-adjusted guidance on the Pakistan Stock Exchange (PSX) for this client only.
 
+You are analyzing this data on a [{timeframe}] chart interval. Adjust your buy/sell/hold strategy accordingly (e.g., '1W' means swing trading, '1M' means long-term investing).
+
 Important rules:
 - Open the html_email with a warm personalized greeting: "Assalamu Alaikum {client_name}, here is your specific portfolio review..."
+- Immediately after the greeting, include a Methodology Badge as the first visible content block:
+  <strong>Analysis Mode: {timeframe_label} Chart | Indicators Used: RSI (14), Pivot Points (S1/R1)</strong>
 - Analyze ONLY this client's holdings and totals — do not reference other clients or portfolios.
 - Use the exact Qty, P/L (PKR), P/E, EPS, and holding period values provided — do not recalculate them differently.
 - Compare each holding's current price vs buy price and support/resistance (R1/S1) when choosing Action and Target Exit Price.
 - If any sector exceeds 40% of this client's portfolio value, display a prominent "⚠️ RISK WARNING" banner at the top of the HTML report.
-- When recommending Top 5 Shariah-Compliant Picks, base suggestions on provided news/trends. Clearly label these as AI investment suggestions, NOT religious rulings or fatwas.
 - Write in a professional, institutional tone — like a CRO briefing the client directly.
 - Output ONLY a valid JSON object with exactly two keys: "html_email" and "telegram_summary".
 - The html_email value must be clean HTML suitable for an email body with inline CSS only.
 - The telegram_summary value must be short Markdown with emojis, address {client_name} by name, suitable for Telegram parse_mode=Markdown.
 - Do NOT include markdown code fences, <script> tags, or external CSS/JS links in html_email.
 
-The html_email MUST include these sections with clear headings:
+STRICTLY FORBIDDEN in html_email:
+- Do NOT generate "Top 5 Picks", "Shariah-Compliant Picks", or any stock recommendation lists outside the client's holdings.
+- Do NOT generate "News Summary", "Dividends", or "Board Meetings" sections.
+These are served by separate API endpoints; duplicating them wastes tokens and confuses users.
 
-0. Portfolio Summary — at the very top (after greeting), show:
+The html_email MUST include ONLY these sections with clear headings:
+
+0. Portfolio Summary — after the Methodology Badge, show:
    - Total Portfolio Value (PKR)
    - Total Unrealized P/L (PKR)
    - Sector allocation table or list with percentages
    - If any sector > 40%, a prominent "⚠️ RISK WARNING" banner
 
 1. Portfolio Action Plan — HTML table with EXACTLY these columns in order:
-   Symbol | Current Price | P/L (PKR) | Action | Qty to Sell | Target Buy Zone | Exit Target
+   Symbol | Current Price | RSI | S1 (Support) | R1 (Resistance) | P/L (PKR) | Action | Qty to Sell | Target Buy Zone | Exit Target
    - Current Price: use provided live market data only (no invented values).
+   - RSI, S1 (Support), R1 (Resistance): use exact numeric values from provided technical data (use "N/A" only when missing; never invent).
    - Action MUST be exactly one of: Buy More, Hold, Sell Partial, Sell All.
    - Qty to Sell: only populate for Sell Partial (e.g. "Sell 50%"), otherwise "-".
    - Target Buy Zone: only populate for Buy More (specific numeric price range), otherwise "-".
    - Exit Target: provide an exact numeric target for taking profit/cutting loss.
    - Include EVERY symbol from technical data — do not skip any row.
 
-2. Top 5 Shariah-Compliant Picks — HTML table with columns:
-   Ticker | Thesis | Current Price | Suggested Buy Price | Exit Target | Risk Note
-   - STRICT PRICE RULE: DO NOT hallucinate or guess current stock prices.
-   - If a recommended stock is NOT in provided portfolio/live data, write "Check Market" in Current Price.
-   - For non-portfolio picks, write Buy/Exit targets as percentages (e.g. "Buy on 5% dip", "Target +15%"), not fake numeric prices.
-
-3. Dividends & Board Meetings — display the scraped PSX data provided (or state if unavailable)
-
-4. News Summary — a concise 2-3 sentence synthesis of the headlines
-
 The telegram_summary MUST include:
 - Greeting addressing {client_name} and report date with total portfolio P/L (with emoji)
+- Chart interval ({timeframe_label}) noted briefly
 - Any critical sector RISK WARNING if >40%
 - Top 2-3 immediate actionable alerts (stop loss, take profit, exit signals)
 - Keep under 3500 characters; use Telegram Markdown (*bold*, _italic_)
 """
 
 
-def _build_system_prompt(client_name: str) -> str:
-    return SYSTEM_PROMPT_TEMPLATE.format(client_name=client_name)
+def _build_system_prompt(client_name: str, timeframe: str = "1d") -> str:
+    return SYSTEM_PROMPT_TEMPLATE.format(
+        client_name=client_name,
+        timeframe=timeframe,
+        timeframe_label=TIMEFRAME_LABELS.get(timeframe, "Daily"),
+    )
+
+
+def _build_methodology_badge_html(timeframe: str = "1d") -> str:
+    label = TIMEFRAME_LABELS.get(timeframe, "Daily")
+    return f"""
+    <div style="background:#ecfdf5;border:1px solid #10b981;color:#065f46;
+                padding:12px 16px;border-radius:8px;margin:16px 0;font-size:14px;">
+        <strong>Analysis Mode: {escape(label)} Chart | Indicators Used: RSI (14), Pivot Points (S1/R1)</strong>
+    </div>"""
+
+
+def _format_indicator_value(value: Any) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):,.2f}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -303,6 +341,8 @@ def build_holdings_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "live_price": row.get("current_price"),
                 "pl_pkr": row.get("pl_amount"),
                 "rsi": row.get("rsi"),
+                "s1": row.get("s1"),
+                "r1": row.get("r1"),
                 "ai_action": fallback_action(row),
             }
         )
@@ -432,45 +472,40 @@ def _build_fallback_report(
     news: list[dict[str, str]],
     psx_events: dict[str, Any],
     portfolio_summary: dict[str, Any],
+    timeframe: str = "1d",
 ) -> dict[str, str]:
     """Build HTML email and Telegram summary when Gemini is unavailable."""
-    portfolio_events = psx_events.get("portfolio_events", {})
     table_rows = ""
 
     for row in technical_rows:
         symbol = row["symbol"]
         pl_pkr = _format_pkr(row.get("pl_amount"))
-        upcoming = portfolio_events.get(symbol, "-")
         exit_price = _fallback_exit_price(row)
         action = fallback_action(row)
 
         table_rows += f"""
         <tr>
             <td style="padding:8px;border:1px solid #e5e7eb;"><strong>{escape(symbol)}</strong></td>
-            <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(str(row.get('quantity', 'N/A')))}</td>
-            <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(str(row.get('buy_price', 'N/A')))}</td>
             <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(str(row.get('current_price', 'N/A')))}</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(_format_indicator_value(row.get('rsi')))}</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(_format_indicator_value(row.get('s1')))}</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(_format_indicator_value(row.get('r1')))}</td>
             <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(pl_pkr)}</td>
-            <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">{escape(_format_pe_eps_col(row))}</td>
-            <td style="padding:8px;border:1px solid #e5e7eb;">{escape(_format_holding_col(row))}</td>
             <td style="padding:8px;border:1px solid #e5e7eb;">{escape(action)}</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;">-</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;">-</td>
             <td style="padding:8px;border:1px solid #e5e7eb;">{escape(exit_price)}</td>
-            <td style="padding:8px;border:1px solid #e5e7eb;">{escape(upcoming)}</td>
         </tr>"""
 
-    news_items = ""
-    for item in news:
-        news_items += f"<li>{escape(item['title'])}</li>"
-    if not news_items:
-        news_items = "<li>No headlines available.</li>"
-
     summary_html = _build_sector_summary_html(portfolio_summary)
+    methodology_badge = _build_methodology_badge_html(timeframe)
 
     body = f"""
     <h1 style="color:#111827;">PSX AI Risk Brief — {escape(client_name)}</h1>
     <p style="font-size:15px;margin-bottom:16px;">
         Assalamu Alaikum <strong>{escape(client_name)}</strong>, here is your specific portfolio review for {escape(report_date)}.
     </p>
+    {methodology_badge}
     <p style="color:#b45309;background:#fffbeb;padding:12px;border-radius:6px;">
         AI analysis was unavailable. Showing fetched data with rule-based alerts below.
     </p>
@@ -483,29 +518,19 @@ def _build_fallback_report(
         <thead>
             <tr style="background:#f3f4f6;">
                 <th style="padding:8px;border:1px solid #e5e7eb;">Symbol</th>
-                <th style="padding:8px;border:1px solid #e5e7eb;">Qty</th>
-                <th style="padding:8px;border:1px solid #e5e7eb;">Buy Price</th>
                 <th style="padding:8px;border:1px solid #e5e7eb;">Current Price</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;">RSI</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;">S1 (Support)</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;">R1 (Resistance)</th>
                 <th style="padding:8px;border:1px solid #e5e7eb;">P/L (PKR)</th>
-                <th style="padding:8px;border:1px solid #e5e7eb;">P/E Ratio &amp; EPS</th>
-                <th style="padding:8px;border:1px solid #e5e7eb;">Holding Period</th>
                 <th style="padding:8px;border:1px solid #e5e7eb;">Action</th>
-                <th style="padding:8px;border:1px solid #e5e7eb;">Target Exit Price</th>
-                <th style="padding:8px;border:1px solid #e5e7eb;">Upcoming Events</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;">Qty to Sell</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;">Target Buy Zone</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;">Exit Target</th>
             </tr>
         </thead>
         <tbody>{table_rows}</tbody>
     </table>
-
-    <h2>Top 5 Shariah-Compliant Picks</h2>
-    <p>AI recommendations unavailable in fallback mode.</p>
-
-    <h2>Dividends &amp; Board Meetings</h2>
-    <pre style="background:#f9fafb;padding:12px;font-size:13px;white-space:pre-wrap;">{escape(psx_events.get('payouts_text', 'No data'))}</pre>
-    <pre style="background:#f9fafb;padding:12px;font-size:13px;white-space:pre-wrap;">{escape(psx_events.get('board_meetings_text', 'No data'))}</pre>
-
-    <h2>News Summary</h2>
-    <ul>{news_items}</ul>
     """
 
     return {
@@ -545,55 +570,52 @@ def generate_report(
     news_text: str,
     psx_events: dict[str, Any],
     gemini_api_key: str | None = None,
+    timeframe: str = "1d",
 ) -> dict[str, str]:
     """
     Generate HTML email and Telegram summary using Gemini.
 
     Falls back to rule-based templates if the AI call fails.
     """
+    timeframe_label = TIMEFRAME_LABELS.get(timeframe, "Daily")
     user_prompt = f"""Generate today's PSX institutional risk briefing for client: {client_name}.
 
 Report Date (PKT): {report_date}
 Client Name: {client_name}
+Chart Interval: {timeframe} ({timeframe_label})
 
 === PORTFOLIO SUMMARY (use these totals exactly) ===
 {portfolio_summary_text}
 
-=== TECHNICAL & FUNDAMENTAL DATA (use Qty, P/L PKR, P/E, EPS, Holding Period exactly) ===
+=== TECHNICAL & FUNDAMENTAL DATA (use Qty, P/L PKR, P/E, EPS, Holding Period, RSI, S1, R1 exactly) ===
 {technical_text}
 
 === PORTFOLIO UPCOMING EVENTS (Upcoming Events column) ===
 {psx_events.get('portfolio_events_text', 'No events in +/-15 day window.')}
 
-=== NEWS HEADLINES ===
-{news_text}
-
-=== PSX PAYOUTS / DIVIDENDS ===
-{psx_events.get('payouts_text', 'No payout data available.')}
-
-=== PSX BOARD MEETINGS / ANNOUNCEMENTS ===
-{psx_events.get('board_meetings_text', 'No board meeting data available.')}
-
 Return ONLY a JSON object with two keys:
-1. "html_email" — full HTML report with inline CSS and all required sections
+1. "html_email" — full HTML report with inline CSS and ONLY the required portfolio sections
 2. "telegram_summary" — short emoji-rich Markdown for Telegram
 
 Rules:
 - Greet {client_name} by name at the start of html_email.
+- Immediately after greeting, include Methodology Badge:
+  Analysis Mode: {timeframe_label} Chart | Indicators Used: RSI (14), Pivot Points (S1/R1)
+- You are analyzing on a [{timeframe}] chart interval. Adjust strategy accordingly ('1W' = swing trading, '1M' = long-term investing).
 - Analyze ONLY this client's portfolio — not any other client.
-- Portfolio Action Plan must use exactly 7 columns in this order:
-  Symbol | Current Price | P/L (PKR) | Action | Qty to Sell | Target Buy Zone | Exit Target.
+- Portfolio Action Plan must use exactly 10 columns in this order:
+  Symbol | Current Price | RSI | S1 (Support) | R1 (Resistance) | P/L (PKR) | Action | Qty to Sell | Target Buy Zone | Exit Target.
+- RSI, S1, R1 must be exact numeric values from technical data (use "N/A" only when missing).
 - Action must be one of: Buy More, Hold, Sell Partial, Sell All.
 - Qty to Sell only for Sell Partial; otherwise "-".
 - Target Buy Zone only for Buy More; otherwise "-".
 - Use provided totals, Qty, P/L (PKR), P/E, EPS, and Holding Period verbatim.
 - Show ⚠️ RISK WARNING banner if any sector exceeds 40%.
 - Current Price must use provided live data only (never invent values).
-- For Top 5 picks: never hallucinate current price. If not in provided live data, write "Check Market".
-- For such non-portfolio picks, Buy/Exit targets must be percentage-based (e.g., "Buy on 5% dip", "Target +15%").
-- telegram_summary: address {client_name}, total P/L, risk warnings, top 2-3 actionable alerts."""
+- STRICTLY FORBIDDEN: Do NOT include Top 5 Picks, News Summary, Dividends, or Board Meetings sections.
+- telegram_summary: address {client_name}, note {timeframe_label} interval, total P/L, risk warnings, top 2-3 actionable alerts from holdings only."""
 
-    system_prompt = _build_system_prompt(client_name)
+    system_prompt = _build_system_prompt(client_name, timeframe)
 
     try:
         raw = _call_llm_json(
@@ -617,6 +639,7 @@ Rules:
         news,
         psx_events,
         portfolio_summary,
+        timeframe=timeframe,
     )
 
 
@@ -633,6 +656,7 @@ def generate_portfolio_html(
     psx_events: dict[str, Any],
     client_name: str = "Investor",
     gemini_api_key: str | None = None,
+    timeframe: str = "1d",
 ) -> str:
     """Generate portfolio analysis HTML for the API (no Telegram delivery)."""
     report = generate_report(
@@ -648,6 +672,7 @@ def generate_portfolio_html(
         news_text=news_text,
         psx_events=psx_events,
         gemini_api_key=gemini_api_key,
+        timeframe=timeframe,
     )
     return report["html_email"]
 
@@ -840,6 +865,8 @@ TOP_PICKS_CRON_MAX_TOKENS = 4096
 
 SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT = """You are a PSX single-stock analyst producing a concise institutional deep-dive.
 
+You are analyzing this data on a [{timeframe}] chart interval. Adjust your buy/sell/hold strategy accordingly (e.g., '1W' means swing trading, '1M' means long-term investing).
+
 Rules:
 - Output ONLY valid JSON with keys:
   "symbol", "current_price", "target_price", "weightage_recommendation", "future_outlook", "action".
@@ -847,7 +874,7 @@ Rules:
 - NEVER hallucinate or guess prices.
 - target_price must be derived from provided Resistance 1 and risk context.
 - weightage_recommendation must be a percentage string (example: "8% - 12%").
-- future_outlook must be 2-3 sentences grounded in provided PSX context/news.
+- future_outlook must be 2-3 sentences grounded in provided PSX context/news and the chart interval.
 - action must be one of: STRONG BUY, BUY, HOLD, SELL.
 """
 
@@ -1282,6 +1309,279 @@ Use LIVE_PRICES_DATA exactly for current_price."""
     }
 
 
+def _sector_timeframe_label(timeframe: str) -> str:
+    return TIMEFRAME_PICK_LABELS.get(timeframe.strip().lower(), "Daily")
+
+
+def _build_sector_symbol_system_prompt(sector: str, timeframe: str) -> str:
+    label = _sector_timeframe_label(timeframe)
+    return f"""You are a PSX equity research analyst.
+
+Task:
+- Select exactly 2 to {SECTOR_PICKS_COUNT} PSX ticker symbols strictly from the "{sector}" sector.
+- Symbols must be suitable for a {label} ({timeframe}) investment horizon.
+
+Output rules:
+- Output ONLY a JSON object with key "symbols".
+- "symbols" must be an array of 2 to {SECTOR_PICKS_COUNT} uppercase PSX tickers from "{sector}" only.
+- Do not include explanations, markdown, or code fences."""
+
+
+def _parse_sector_symbols_json(raw: str) -> list[str]:
+    text = _strip_markdown_fences(raw)
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("Sector symbol response is not an object")
+    symbols_raw = data.get("symbols")
+    if not isinstance(symbols_raw, list):
+        raise ValueError("Missing symbols array")
+
+    symbols: list[str] = []
+    for item in symbols_raw:
+        symbol = normalize_psx_symbol(item)
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
+        if len(symbols) == SECTOR_PICKS_COUNT:
+            break
+
+    if len(symbols) < 2:
+        raise ValueError(f"Model returned fewer than 2 valid sector symbols")
+    return symbols
+
+
+def select_sector_pick_symbols(
+    *,
+    groq_api_key: str,
+    model_name: str,
+    report_date: str,
+    sector: str,
+    timeframe: str,
+    news_text: str,
+    gemini_api_key: str | None = None,
+) -> list[str]:
+    """Select 2-3 PSX symbols for a specific sector and investment horizon."""
+    label = _sector_timeframe_label(timeframe)
+    user_prompt = f"""Select 2 to {SECTOR_PICKS_COUNT} PSX ticker symbols for sector-specific top picks.
+
+Report Date (PKT): {report_date}
+Sector: {sector}
+Investment Horizon: {timeframe} ({label})
+
+=== NEWS HEADLINES ===
+{news_text[:2500]}
+
+Return JSON only:
+{{"symbols": ["SYMBOL1", "SYMBOL2"]}}
+
+Rules:
+- Every symbol MUST belong to the "{sector}" sector on PSX.
+- Pick symbols suited to {label} trading/investing (e.g., Daily = swing trade setup, Yearly = dividend/growth)."""
+
+    try:
+        raw_text = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=_build_sector_symbol_system_prompt(sector, timeframe),
+            user_prompt=user_prompt,
+            temperature=0.2,
+            max_tokens=1024,
+        )
+        return _parse_sector_symbols_json(raw_text)
+    except Exception as exc:
+        logger.exception(
+            "Sector symbol selection failed for %s/%s: %s", sector, timeframe, exc
+        )
+        fallback = SECTOR_FALLBACK_SYMBOLS.get(sector, [])
+        if len(fallback) >= 2:
+            logger.warning("Using fallback symbols for %s: %s", sector, fallback)
+            return fallback[:SECTOR_PICKS_COUNT]
+        raise RuntimeError(
+            f"Failed to select sector pick symbols for {sector}/{timeframe}."
+        ) from exc
+
+
+def _build_sector_picks_system_prompt(sector: str, timeframe: str) -> str:
+    label = _sector_timeframe_label(timeframe)
+    return f"""You are a PSX equity research analyst producing Shariah-compliant stock picks.
+
+You are generating stock picks strictly for the "{sector}" sector on a "{timeframe}" ({label}) investment horizon.
+Pick the top 2 to {SECTOR_PICKS_COUNT} best Shariah-compliant stocks in this specific sector.
+
+Rules:
+- Each pick's thesis (summary/why) MUST explain WHY the stock fits this {label} horizon
+  (Daily = swing trade setup, Monthly = medium-term catalyst, Yearly = long-term dividend/growth).
+- Output ONLY a valid JSON object with key "picks".
+- "picks" must contain 2 to {SECTOR_PICKS_COUNT} objects.
+- CRITICAL: Use exact LIVE_PRICES_DATA values for current_price. Never invent prices.
+- If LIVE_PRICES_DATA shows "N/A", set current_price to "N/A" and use percentage buy/exit targets.
+- Each pick object: symbol, sector, summary, why, outlook_short, outlook_long, buy_zone, current_price, exit_target.
+- Set sector to "{sector}" for every pick.
+- Professional tone; AI investment suggestions only (not fatwas)."""
+
+
+def _parse_sector_pick_list(raw_list: Any) -> list[dict[str, str]]:
+    if not isinstance(raw_list, list):
+        return []
+    picks: list[dict[str, str]] = []
+    for item in raw_list[:SECTOR_PICKS_COUNT]:
+        if isinstance(item, dict):
+            picks.append(_normalize_pick_item(item))
+    return picks
+
+
+def _parse_sector_picks_json(raw: str) -> list[dict[str, str]]:
+    text = _strip_markdown_fences(raw)
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("Sector picks response is not an object")
+    picks = _parse_sector_pick_list(data.get("picks", []))
+    if len(picks) < 1:
+        raise ValueError("Missing picks array")
+    return picks
+
+
+def _build_sector_picks_html(
+    *,
+    report_date: str,
+    sector: str,
+    timeframe: str,
+    picks: list[dict[str, str]],
+) -> str:
+    label = _sector_timeframe_label(timeframe)
+    rows = ""
+    for pick in picks:
+        rows += (
+            "<tr>"
+            f"<td>{escape(pick.get('symbol', ''))}</td>"
+            f"<td>{escape(pick.get('summary', ''))}</td>"
+            f"<td>{escape(pick.get('current_price', 'N/A'))}</td>"
+            f"<td>{escape(pick.get('buy_zone', ''))}</td>"
+            f"<td>{escape(pick.get('exit_target', ''))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5'>No picks available.</td></tr>"
+    body = (
+        f"<h1 style='color:#111827;'>PSX {escape(sector)} Picks — {escape(label)}</h1>"
+        f"<p style='color:#64748b;'>Report Date: {escape(report_date)} | Horizon: {escape(timeframe)}</p>"
+        f"<h2>{escape(label)} Top Picks — {escape(sector)}</h2>"
+        "<table border='1' cellpadding='6' cellspacing='0' style='width:100%;border-collapse:collapse;'>"
+        "<tr><th>Ticker</th><th>Thesis</th><th>Current Price</th><th>Buy Zone</th><th>Exit Target</th></tr>"
+        f"{rows}</table>"
+    )
+    return _wrap_html_document(body)
+
+
+def apply_live_prices_to_sector_picks(
+    result: dict[str, Any],
+    live_prices: dict[str, float | None],
+) -> dict[str, Any]:
+    """Ensure sector pick cards use authoritative live prices."""
+    updated = dict(result)
+    picks = updated.get("picks")
+    if not isinstance(picks, list) or not picks:
+        return updated
+
+    expanded = dict(live_prices)
+    missing = [
+        str(pick.get("symbol", "")).strip().upper()
+        for pick in picks
+        if expanded.get(str(pick.get("symbol", "")).strip().upper()) is None
+    ]
+    missing = [symbol for symbol in missing if symbol]
+    if missing:
+        fetched = fetch_live_prices_for_symbols(missing)
+        kse100_quotes = fetch_psx_kse100_quote_map()
+        for symbol in missing:
+            if fetched.get(symbol) is not None:
+                expanded[symbol] = fetched[symbol]
+                continue
+            quote = kse100_quotes.get(symbol)
+            if quote and quote.get("current", 0) > 0:
+                expanded[symbol] = float(quote["current"])
+
+    updated["picks"] = _enforce_live_prices_on_pick_list(picks, expanded)
+    return updated
+
+
+def generate_sector_picks_with_live_prices(
+    *,
+    groq_api_key: str,
+    model_name: str,
+    report_date: str,
+    sector: str,
+    timeframe: str,
+    news: list[dict[str, str]],
+    news_text: str,
+    recommended_symbols: list[str],
+    live_prices: dict[str, float | None],
+    gemini_api_key: str | None = None,
+) -> dict[str, Any]:
+    """Generate sector/timeframe-specific picks from selected symbols and live prices."""
+    label = _sector_timeframe_label(timeframe)
+    live_prices_data = {
+        symbol: (
+            f"{live_prices[symbol]:.2f}"
+            if live_prices.get(symbol) is not None and live_prices[symbol] > 0
+            else "N/A"
+        )
+        for symbol in recommended_symbols
+    }
+    live_prices_json = json.dumps(live_prices_data, indent=2)
+    symbols_list = ", ".join(recommended_symbols)
+
+    user_prompt = f"""Generate PSX top picks for one sector and horizon.
+
+Report Date (PKT): {report_date}
+Sector: {sector}
+Investment Horizon: {timeframe} ({label})
+Symbols (use ONLY these): {symbols_list}
+
+LIVE_PRICES_DATA:
+{live_prices_json}
+
+News (context):
+{news_text[:2000]}
+
+Return JSON with key "picks" containing 2 to {SECTOR_PICKS_COUNT} objects.
+Each thesis must explain why the stock fits {label} horizon:
+- Daily = swing trade setup
+- Monthly = medium-term catalyst
+- Yearly = long-term dividend/growth
+
+Use LIVE_PRICES_DATA exactly for current_price."""
+
+    try:
+        raw = _call_llm_json(
+            groq_api_key=groq_api_key,
+            gemini_api_key=gemini_api_key,
+            model_name=model_name,
+            system_prompt=_build_sector_picks_system_prompt(sector, timeframe),
+            user_prompt=user_prompt,
+            temperature=0.3,
+            max_tokens=TOP_PICKS_CRON_MAX_TOKENS,
+        )
+        picks = _parse_sector_picks_json(raw)
+        for pick in picks:
+            pick["sector"] = sector
+        report_html = _build_sector_picks_html(
+            report_date=report_date,
+            sector=sector,
+            timeframe=timeframe,
+            picks=picks,
+        )
+        parsed = {"picks": picks, "report_html": report_html}
+        return apply_live_prices_to_sector_picks(parsed, live_prices)
+    except Exception as exc:
+        logger.exception(
+            "Sector picks generation failed for %s/%s: %s", sector, timeframe, exc
+        )
+
+    logger.warning("Using empty fallback for sector picks %s/%s.", sector, timeframe)
+    return {"picks": [], "report_html": ""}
+
+
 def generate_single_stock_deep_dive(
     *,
     groq_api_key: str,
@@ -1294,11 +1594,13 @@ def generate_single_stock_deep_dive(
     resistance_1: float | None,
     news_text: str,
     gemini_api_key: str | None = None,
+    timeframe: str = "1d",
 ) -> dict[str, str]:
     """Generate a strict JSON deep-dive for one stock using provided live data."""
     if current_price is None:
         raise ValueError(f"Unable to fetch live current price for symbol: {symbol}")
 
+    timeframe_label = TIMEFRAME_LABELS.get(timeframe, "Daily")
     fallback_target = resistance_1 if resistance_1 is not None else current_price * 1.08
     fallback_action = "HOLD"
     if resistance_1 is not None and current_price < resistance_1 * 0.95:
@@ -1322,6 +1624,7 @@ def generate_single_stock_deep_dive(
     user_prompt = f"""Prepare a Single Stock Deep Dive JSON.
 
 Report Date (PKT): {report_date}
+Chart Interval: {timeframe} ({timeframe_label})
 
 === STOCK ===
 Symbol: {symbol}
@@ -1334,10 +1637,11 @@ Resistance 1 (R1): {"N/A" if resistance_1 is None else f"{resistance_1:.2f}"}
 {news_text}
 
 Requirements:
+- You are analyzing on a [{timeframe}] chart interval. Adjust strategy accordingly ('1W' = swing trading, '1M' = long-term investing).
 - Keep current_price exactly as provided live value.
 - target_price should be a short-term exit/profit target based primarily on R1.
-- weightage_recommendation must be suitable for risk/volatility.
-- future_outlook must be 2-3 sentences.
+- weightage_recommendation must be suitable for risk/volatility on this timeframe.
+- future_outlook must be 2-3 sentences referencing the {timeframe_label} chart context.
 - action must be one of: STRONG BUY, BUY, HOLD, SELL."""
 
     try:
@@ -1345,7 +1649,7 @@ Requirements:
             groq_api_key=groq_api_key,
             gemini_api_key=gemini_api_key,
             model_name=model_name,
-            system_prompt=SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT,
+            system_prompt=SINGLE_STOCK_DEEP_DIVE_SYSTEM_PROMPT.format(timeframe=timeframe),
             user_prompt=user_prompt,
             temperature=0.25,
             max_tokens=2048,

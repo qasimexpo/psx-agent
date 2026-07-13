@@ -3,7 +3,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Search } from "lucide-react";
 import SymbolAutocomplete from "@/components/SymbolAutocomplete";
+import TimeframeSelector from "@/components/TimeframeSelector";
 import { analyzeSingleStock, type SingleStockAnalyzeResult } from "@/lib/api";
+import { getTimeframeChartLabel, type AnalysisTimeframe } from "@/lib/timeframes";
 
 const actionBadgeClasses: Record<string, string> = {
   "STRONG BUY": "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -14,6 +16,7 @@ const actionBadgeClasses: Record<string, string> = {
 
 export default function QuickStockAnalyzer() {
   const [symbol, setSymbol] = useState("");
+  const [timeframe, setTimeframe] = useState<AnalysisTimeframe>("1d");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SingleStockAnalyzeResult | null>(null);
@@ -41,7 +44,7 @@ export default function QuickStockAnalyzer() {
     setError(null);
 
     try {
-      const response = await analyzeSingleStock(normalizedSymbol);
+      const response = await analyzeSingleStock(normalizedSymbol, timeframe);
       setResult(response);
       setSymbol(normalizedSymbol);
     } catch (err) {
@@ -64,7 +67,7 @@ export default function QuickStockAnalyzer() {
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <SymbolAutocomplete
@@ -75,6 +78,12 @@ export default function QuickStockAnalyzer() {
                 className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-9 pr-3 text-sm text-[#0B132B] uppercase outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 sm:text-base"
               />
             </div>
+            <TimeframeSelector
+              value={timeframe}
+              onChange={setTimeframe}
+              disabled={loading}
+              className="w-full lg:w-56"
+            />
             <button
               type="submit"
               disabled={loading}
@@ -102,6 +111,12 @@ export default function QuickStockAnalyzer() {
 
         {result && (
           <div className="glass-card mt-6 rounded-2xl p-5 sm:p-6">
+            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <strong>
+                Analysis Mode: {getTimeframeChartLabel(timeframe)} Chart
+              </strong>{" "}
+              | Indicators Used: RSI (14), Pivot Points (S1/R1)
+            </div>
             <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-xl font-bold text-[#0B132B] sm:text-2xl">{result.symbol}</h3>
               <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold sm:text-sm ${badgeClass}`}>

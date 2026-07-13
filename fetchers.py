@@ -51,6 +51,12 @@ _TV_ANALYSIS_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
 _TV_CACHE_TTL_SECONDS = 420
 _TV_POST_CALL_DELAY = 1.5
 _TV_RATE_LIMIT_BACKOFF = (5, 10)
+DEFAULT_TIMEFRAME = "1d"
+TIMEFRAME_TO_INTERVAL = {
+    "1d": Interval.INTERVAL_1_DAY,
+    "1W": Interval.INTERVAL_1_WEEK,
+    "1M": Interval.INTERVAL_1_MONTH,
+}
 
 _KSE100_INDEX_CACHE: tuple[dict[str, Any], float] | None = None
 _KSE100_INDEX_CACHE_TTL_SECONDS = 180
@@ -95,6 +101,73 @@ MONTHS = {
     "dec": 12,
     "december": 12,
 }
+
+
+DEFAULT_SECTOR = "General"
+
+SECTOR_MAP: dict[str, str] = {
+    # E&P
+    "OGDC": "E&P",
+    "PPL": "E&P",
+    "POL": "E&P",
+    "MARI": "E&P",
+    "PSO": "E&P",
+    # Oil & Gas Marketing
+    "ATRL": "Oil & Gas Marketing",
+    "SHEL": "Oil & Gas Marketing",
+    # Cement
+    "LUCK": "Cement",
+    "DGKC": "Cement",
+    "MLCF": "Cement",
+    "KOHC": "Cement",
+    "CHCC": "Cement",
+    "FCCL": "Cement",
+    # Power
+    "HUBC": "Power",
+    "KAPCO": "Power",
+    "NCPL": "Power",
+    "KEL": "Power",
+    # Fertilizer
+    "EFERT": "Fertilizer",
+    "FFC": "Fertilizer",
+    "FATIMA": "Fertilizer",
+    # Banking
+    "MEBL": "Banking",
+    "HBL": "Banking",
+    "UBL": "Banking",
+    "MCB": "Banking",
+    "BAFL": "Banking",
+    "BAHL": "Banking",
+    "AKBL": "Banking",
+    # Tech
+    "SYS": "Tech",
+    "TRG": "Tech",
+    "AVN": "Tech",
+    # Chemical
+    "LOTCHEM": "Chemical",
+    "EPCL": "Chemical",
+    # Pharma
+    "SEARL": "Pharma",
+    "GLAXO": "Pharma",
+    # Food & Beverage
+    "ENGRO": "Food & Beverage",
+    "UNITY": "Food & Beverage",
+    # Textile
+    "GATM": "Textile",
+    "NML": "Textile",
+    # Steel
+    "ISL": "Steel",
+    # Insurance
+    "ABL": "Insurance",
+}
+
+
+def resolve_sector(symbol: str, explicit: str | None = None) -> str:
+    """Resolve sector from explicit input or SECTOR_MAP; default to General."""
+    cleaned = (explicit or "").strip()
+    if cleaned and cleaned.lower() != "unknown":
+        return cleaned
+    return SECTOR_MAP.get(symbol.upper(), DEFAULT_SECTOR)
 
 
 class Holding(TypedDict):
@@ -210,7 +283,7 @@ def shares_to_portfolio(shares: list[dict[str, Any]]) -> dict[str, Holding]:
             continue
         if buy_price <= 0 or quantity <= 0:
             continue
-        sector = str(entry.get("sector", "Unknown")).strip() or "Unknown"
+        sector = resolve_sector(symbol, entry.get("sector"))
         buy_date_raw = entry.get("buy_date")
         buy_date = _parse_buy_date(str(buy_date_raw)) if buy_date_raw else None
         portfolio[symbol] = {
@@ -283,6 +356,8 @@ def parse_portfolio(raw: str) -> dict[str, Holding]:
                 f"No sector/buy_date for {symbol}; CGT tracking unavailable.",
                 file=sys.stderr,
             )
+
+        sector = resolve_sector(symbol, sector if sector != "Unknown" else None)
 
         if quantity <= 0:
             print(f"Skipping {symbol}: quantity must be positive.", file=sys.stderr)
@@ -363,7 +438,45 @@ def _build_technical_row(
     return row, text_line
 
 
-def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
+def _normalize_indicator_payload(
+    data: dict[str, Any] | None,
+    *,
+    timeframe: str,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """Normalize TradingView indicator dict with explicit RSI/S1/R1 keys."""
+    if not data:
+        return {
+            "current_price": None,
+            "rsi": None,
+            "volume": None,
+            "s1": None,
+            "r1": None,
+            "support_1": None,
+            "resistance_1": None,
+            "timeframe": timeframe,
+            "error": error or "Batch fetch failed",
+        }
+
+    s1 = data.get("Pivot.M.Classic.S1")
+    r1 = data.get("Pivot.M.Classic.R1")
+    return {
+        "current_price": data.get("close"),
+        "rsi": data.get("RSI"),
+        "volume": data.get("volume"),
+        "s1": s1,
+        "r1": r1,
+        "support_1": s1,
+        "resistance_1": r1,
+        "timeframe": timeframe,
+        "error": error,
+    }
+
+
+def fetch_market_indicators(
+    symbols: set[str],
+    timeframe: str = DEFAULT_TIMEFRAME,
+) -> dict[str, dict[str, Any]]:
     """
     Fetch TradingView market indicators once for a set of symbols.
 
@@ -372,11 +485,16 @@ def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
     if not symbols:
         return {}
 
+    interval = resolve_tv_interval(timeframe)
     symbol_list = sorted(
         s for s in (normalize_psx_symbol(raw) or str(raw).strip().upper() for raw in symbols) if s
     )
     tv_symbols = [f"PSX:{ticker}" for ticker in symbol_list]
-    results = _get_multiple_analysis_resilient(tv_symbols)
+    results = _get_multiple_analysis_resilient(
+        tv_symbols,
+        interval=interval,
+        timeframe=timeframe,
+    )
 
     indicators: dict[str, dict[str, Any]] = {}
 
@@ -384,26 +502,20 @@ def fetch_market_indicators(symbols: set[str]) -> dict[str, dict[str, Any]]:
         symbol_key = f"PSX:{symbol}"
         data = results.get(symbol_key)
         if not data:
-            data = _ta_handler_get_analysis_resilient(symbol)
+            data = _ta_handler_get_analysis_resilient(
+                symbol,
+                interval=interval,
+                timeframe=timeframe,
+            )
 
         if data:
-            indicators[symbol] = {
-                "current_price": data.get("close"),
-                "rsi": data.get("RSI"),
-                "volume": data.get("volume"),
-                "r1": data.get("Pivot.M.Classic.R1"),
-                "s1": data.get("Pivot.M.Classic.S1"),
-                "error": None,
-            }
+            indicators[symbol] = _normalize_indicator_payload(data, timeframe=timeframe)
         else:
-            indicators[symbol] = {
-                "current_price": None,
-                "rsi": None,
-                "volume": None,
-                "r1": None,
-                "s1": None,
-                "error": "Batch fetch failed",
-            }
+            indicators[symbol] = _normalize_indicator_payload(
+                None,
+                timeframe=timeframe,
+                error="Batch fetch failed",
+            )
 
     return indicators
 
@@ -442,6 +554,11 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     return "429" in str(exc)
 
 
+def resolve_tv_interval(timeframe: str = DEFAULT_TIMEFRAME) -> Interval:
+    """Map API timeframe string to a TradingView interval."""
+    return TIMEFRAME_TO_INTERVAL[timeframe]
+
+
 def _tv_symbol_key(symbol: str) -> str:
     """Build normalized TradingView symbol key (e.g. PSX:OGDC)."""
     if ":" in symbol:
@@ -452,32 +569,47 @@ def _tv_symbol_key(symbol: str) -> str:
     return f"PSX:{cleaned}" if cleaned else symbol.strip().upper()
 
 
+def _tv_cache_key(symbol: str, timeframe: str = DEFAULT_TIMEFRAME) -> str:
+    """Build interval-aware cache key (e.g. PSX:OGDC:1W)."""
+    return f"{_tv_symbol_key(symbol)}:{timeframe}"
+
+
 def _get_cached_tv_indicators(
     tv_symbols: list[str],
+    timeframe: str = DEFAULT_TIMEFRAME,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Return cached indicator dicts and symbols that still need a network fetch."""
     now = time.time()
     cached: dict[str, dict[str, Any]] = {}
     needed: list[str] = []
     for raw in tv_symbols:
-        key = _tv_symbol_key(raw)
-        entry = _TV_ANALYSIS_CACHE.get(key)
+        base_key = _tv_symbol_key(raw)
+        cache_key = _tv_cache_key(base_key, timeframe)
+        entry = _TV_ANALYSIS_CACHE.get(cache_key)
         if entry and now - entry[1] < _TV_CACHE_TTL_SECONDS:
-            cached[key] = entry[0]
-        elif key not in needed:
-            needed.append(key)
+            cached[base_key] = entry[0]
+        elif base_key not in needed:
+            needed.append(base_key)
     return cached, needed
 
 
-def _store_tv_indicators_in_cache(tv_symbol: str, indicators: dict[str, Any]) -> None:
+def _store_tv_indicators_in_cache(
+    tv_symbol: str,
+    indicators: dict[str, Any],
+    timeframe: str = DEFAULT_TIMEFRAME,
+) -> None:
     """Store TradingView indicator payload in the shared in-memory cache."""
-    key = _tv_symbol_key(tv_symbol)
+    key = _tv_cache_key(tv_symbol, timeframe)
     _TV_ANALYSIS_CACHE[key] = (indicators, time.time())
 
 
-def _get_close_from_tv_cache(symbol: str, cache_ttl_seconds: int) -> float | None:
+def _get_close_from_tv_cache(
+    symbol: str,
+    cache_ttl_seconds: int,
+    timeframe: str = DEFAULT_TIMEFRAME,
+) -> float | None:
     """Read a cached close price for a PSX symbol when still fresh."""
-    key = _tv_symbol_key(symbol)
+    key = _tv_cache_key(symbol, timeframe)
     entry = _TV_ANALYSIS_CACHE.get(key)
     if not entry:
         return None
@@ -493,7 +625,11 @@ def _get_close_from_tv_cache(symbol: str, cache_ttl_seconds: int) -> float | Non
         return None
 
 
-def _get_multiple_analysis_resilient(symbols: list[str]) -> dict[str, dict[str, Any]]:
+def _get_multiple_analysis_resilient(
+    symbols: list[str],
+    interval: Interval = Interval.INTERVAL_1_DAY,
+    timeframe: str = DEFAULT_TIMEFRAME,
+) -> dict[str, dict[str, Any]]:
     """
     Fetch TradingView batch analysis with per-symbol cache, 429 backoff, and delays.
 
@@ -503,7 +639,7 @@ def _get_multiple_analysis_resilient(symbols: list[str]) -> dict[str, dict[str, 
         return {}
 
     normalized_keys = [_tv_symbol_key(symbol) for symbol in symbols]
-    cached, needed = _get_cached_tv_indicators(normalized_keys)
+    cached, needed = _get_cached_tv_indicators(normalized_keys, timeframe)
     results: dict[str, dict[str, Any]] = dict(cached)
 
     if not needed:
@@ -514,7 +650,7 @@ def _get_multiple_analysis_resilient(symbols: list[str]) -> dict[str, dict[str, 
         try:
             fresh = get_multiple_analysis(
                 screener="pakistan",
-                interval=Interval.INTERVAL_1_DAY,
+                interval=interval,
                 symbols=needed,
             )
             break
@@ -538,13 +674,17 @@ def _get_multiple_analysis_resilient(symbols: list[str]) -> dict[str, dict[str, 
             if analysis is None:
                 continue
             indicators = analysis.indicators or {}
-            _store_tv_indicators_in_cache(tv_symbol, indicators)
+            _store_tv_indicators_in_cache(tv_symbol, indicators, timeframe)
             results[tv_symbol] = indicators
 
     return results
 
 
-def _ta_handler_get_analysis_resilient(symbol: str) -> dict[str, Any] | None:
+def _ta_handler_get_analysis_resilient(
+    symbol: str,
+    interval: Interval = Interval.INTERVAL_1_DAY,
+    timeframe: str = DEFAULT_TIMEFRAME,
+) -> dict[str, Any] | None:
     """Fetch one symbol via TA_Handler with cache, 429 backoff, and post-call delay."""
     if ":" in symbol:
         cleaned = normalize_psx_symbol(symbol.split(":", 1)[1])
@@ -554,7 +694,7 @@ def _ta_handler_get_analysis_resilient(symbol: str) -> dict[str, Any] | None:
         return None
 
     tv_key = f"PSX:{cleaned}"
-    cached, _ = _get_cached_tv_indicators([tv_key])
+    cached, _ = _get_cached_tv_indicators([tv_key], timeframe)
     if tv_key in cached:
         return cached[tv_key]
 
@@ -564,13 +704,13 @@ def _ta_handler_get_analysis_resilient(symbol: str) -> dict[str, Any] | None:
                 symbol=cleaned,
                 screener="pakistan",
                 exchange="PSX",
-                interval=Interval.INTERVAL_1_DAY,
+                interval=interval,
             )
             analysis = handler.get_analysis()
             indicators = analysis.indicators or {}
             if not indicators:
                 raise ValueError(f"Empty indicators for {cleaned}")
-            _store_tv_indicators_in_cache(tv_key, indicators)
+            _store_tv_indicators_in_cache(tv_key, indicators, timeframe)
             return indicators
         except Exception as exc:
             logger.warning(
@@ -1290,6 +1430,7 @@ def fetch_kse100_index() -> dict[str, Any]:
 
 def fetch_technical_data(
     portfolio: dict[str, Holding],
+    timeframe: str = DEFAULT_TIMEFRAME,
 ) -> tuple[list[dict[str, Any]], str]:
     """
     Fetch TradingView technical data for each portfolio symbol.
@@ -1297,7 +1438,7 @@ def fetch_technical_data(
     Computes exact PKR P/L as (current - buy_price) * quantity.
     Returns structured rows and a plain-text block for the AI prompt.
     """
-    indicators = fetch_market_indicators(set(portfolio.keys()))
+    indicators = fetch_market_indicators(set(portfolio.keys()), timeframe=timeframe)
     rows: list[dict[str, Any]] = []
     text_lines: list[str] = []
 
@@ -1320,11 +1461,14 @@ def fetch_technical_data(
     return rows, "\n".join(text_lines)
 
 
-def build_market_data_cache(symbols: set[str]) -> dict[str, Any]:
+def build_market_data_cache(
+    symbols: set[str],
+    timeframe: str = DEFAULT_TIMEFRAME,
+) -> dict[str, Any]:
     """Fetch technicals, fundamentals, and PSX events once for all symbols."""
     print(f"Building market data cache for {len(symbols)} unique symbol(s)...")
     return {
-        "technicals": fetch_market_indicators(symbols),
+        "technicals": fetch_market_indicators(symbols, timeframe=timeframe),
         "fundamentals": fetch_fundamentals(symbols),
         "psx_events": fetch_psx_corporate_events(symbols),
     }
@@ -1490,7 +1634,7 @@ def compute_portfolio_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         current = row.get("current_price")
         quantity = row.get("quantity", 0)
         pl_amount = row.get("pl_amount")
-        sector = row.get("sector", "Unknown")
+        sector = row.get("sector", DEFAULT_SECTOR)
 
         if current is not None and quantity:
             position_value = current * quantity
