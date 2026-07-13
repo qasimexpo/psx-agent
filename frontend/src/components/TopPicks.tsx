@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Loader2, TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, Inbox, Loader2, TrendingUp } from "lucide-react";
 import SectorSelector from "@/components/SectorSelector";
 import {
   fetchTopPicks,
@@ -127,22 +127,52 @@ function PremiumPickCard({ pick, rank }: { pick: PickCard; rank: number }) {
 
 export default function TopPicks() {
   const [picksCache, setPicksCache] = useState<Partial<Record<PicksCacheKey, PickCard[]>>>({});
+  const [fetchedKeys, setFetchedKeys] = useState<Set<PicksCacheKey>>(new Set());
+  const [loadingKey, setLoadingKey] = useState<PicksCacheKey | null>(null);
   const [activeTab, setActiveTab] = useState<PickHorizon>("daily");
   const [activeSector, setActiveSector] = useState<TopPickSector>(TOP_PICK_SECTOR_ALL);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+  const fetchedKeysRef = useRef<Set<PicksCacheKey>>(new Set());
+
+  const currentKey = cacheKey(activeTab, activeSector);
+  const isLoading = loadingKey === currentKey;
+  const hasFetched = fetchedKeys.has(currentKey);
+  const picks = picksCache[currentKey] ?? [];
+  const isSwitching = isLoading && picks.length > 0;
+  const sectorLabel = getSectorLabel(activeSector);
+  const horizonLabel = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
 
   const loadPicks = useCallback(async (horizon: PickHorizon, sector: TopPickSector) => {
     const key = cacheKey(horizon, sector);
-    setLoading(true);
+    if (fetchedKeysRef.current.has(key)) {
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    setLoadingKey(key);
     setError(null);
+
     try {
       const data = await fetchTopPicks(horizon, sector);
-      setPicksCache((current) => ({ ...current, [key]: data.picks }));
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setPicksCache((current) => ({ ...current, [key]: data.picks ?? [] }));
+      fetchedKeysRef.current.add(key);
+      setFetchedKeys(new Set(fetchedKeysRef.current));
     } catch (err) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load top picks.");
+      fetchedKeysRef.current.add(key);
+      setFetchedKeys(new Set(fetchedKeysRef.current));
+      setPicksCache((current) => ({ ...current, [key]: [] }));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoadingKey((current) => (current === key ? null : current));
+      }
     }
   }, []);
 
@@ -150,10 +180,8 @@ export default function TopPicks() {
     loadPicks(activeTab, activeSector);
   }, [activeTab, activeSector, loadPicks]);
 
-  const picks = picksCache[cacheKey(activeTab, activeSector)] ?? [];
-  const isSwitching = loading && picks.length > 0;
-  const sectorLabel = getSectorLabel(activeSector);
-  const horizonLabel = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
+  const showSkeleton = isLoading && !hasFetched && !error;
+  const showEmpty = hasFetched && !isLoading && !error && picks.length === 0;
 
   return (
     <section id="top-picks" className="section-divider scroll-mt-20 px-4 py-14 sm:px-6">
@@ -185,7 +213,7 @@ export default function TopPicks() {
                       }`}
                     >
                       {tab.label}
-                      {loading && activeTab === tab.key && (
+                      {isLoading && activeTab === tab.key && (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       )}
                     </button>
@@ -194,7 +222,6 @@ export default function TopPicks() {
                 <SectorSelector
                   value={activeSector}
                   onChange={setActiveSector}
-                  disabled={loading}
                 />
               </div>
             </div>
@@ -208,19 +235,28 @@ export default function TopPicks() {
           </div>
         )}
 
-        {loading && picks.length === 0 && !error && (
+        {showSkeleton && (
           <div className={`${PICKS_GRID_CLASS}`}>
+            <p className="col-span-full mb-2 text-center text-sm text-slate-500">
+              Loading picks...
+            </p>
             {[0, 1, 2].map((index) => (
               <PickCardSkeleton key={`skeleton-${index}`} />
             ))}
           </div>
         )}
 
-        {!loading && !error && picks.length === 0 && (
-          <p className="mt-8 text-center text-slate-500">
-            {horizonLabel} picks for {sectorLabel} are not in the database yet. The daily
-            update job may still be running — please check back shortly.
-          </p>
+        {showEmpty && (
+          <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
+            <Inbox className="h-10 w-10 text-slate-400" />
+            <p className="text-base font-semibold text-slate-700">
+              No {horizonLabel.toLowerCase()} picks for {sectorLabel} yet
+            </p>
+            <p className="max-w-md text-sm text-slate-500">
+              This sector has not been generated for the {horizonLabel.toLowerCase()} horizon.
+              Try another sector, or check back after the daily update completes.
+            </p>
+          </div>
         )}
 
         {!error && picks.length > 0 && (

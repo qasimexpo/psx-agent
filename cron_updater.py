@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from database import (
     TOP_PICK_SECTORS,
     TOP_PICK_TIMEFRAMES,
+    get_top_picks_rows,
     init_db,
     replace_news_and_events,
     upsert_ticker_rows,
@@ -118,14 +119,28 @@ def update_top_picks() -> None:
     news = fetch_pakistan_news(limit=5)
     news_text = format_news_for_prompt(news)
 
-    for timeframe in TOP_PICK_TIMEFRAMES:
-        for sector in TOP_PICK_SECTORS:
+    for sector in TOP_PICK_SECTORS:
+        for timeframe in TOP_PICK_TIMEFRAMES:
+            if get_top_picks_rows(timeframe, sector):
+                logger.info("Skipping existing top picks for %s/%s.", timeframe, sector)
+                continue
             try:
+                daily_rows = get_top_picks_rows("daily", sector) if timeframe != "daily" else []
+                recommended = None
+                if daily_rows:
+                    payload = daily_rows[0].ai_response_json or {}
+                    recommended = [
+                        str(pick.get("symbol", "")).strip().upper()
+                        for pick in payload.get("picks", [])
+                        if str(pick.get("symbol", "")).strip()
+                    ]
+
                 result = generate_sector_top_picks_for_cron(
                     timeframe,
                     sector,
                     news=news,
                     news_text=news_text,
+                    recommended_symbols=recommended,
                 )
                 payload = {
                     "picks": result.get("picks", []),

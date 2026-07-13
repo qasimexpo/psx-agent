@@ -110,6 +110,7 @@ export type DividendCalendarItem = {
 };
 
 const DEFAULT_TIMEOUT_MS = 15000;
+const TOP_PICKS_TIMEOUT_MS = 20000;
 const TICKER_TIMEOUT_MS = 10000;
 const AI_ANALYSIS_TIMEOUT_MS = 180000;
 
@@ -188,7 +189,12 @@ export async function fetchTopPicks(
   sector: TopPickSector = TOP_PICK_SECTOR_ALL,
 ): Promise<TopPicksResult> {
   const params = new URLSearchParams({ category, sector });
-  return apiFetch<TopPicksResult>(`/top_picks?${params}`);
+  return apiFetch<TopPicksResult>(
+    `/top_picks?${params}`,
+    undefined,
+    TOP_PICKS_TIMEOUT_MS,
+    "Top picks generation is taking longer than expected. Please try again in a moment.",
+  );
 }
 
 export function toNewsItem(item: NewsAndEventsItem): NewsItem {

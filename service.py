@@ -4,6 +4,7 @@ Stateless orchestration for the PSX FastAPI backend.
 
 import logging
 import os
+import threading
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -30,6 +31,7 @@ from database import (
     get_news_and_events,
     get_top_picks_rows,
     parse_news_metadata,
+    upsert_top_picks,
 )
 from fetchers import (
     build_client_report_data,
@@ -52,6 +54,8 @@ DEFAULT_MODEL = "llama-3.1-8b-instant"
 PKT = ZoneInfo("Asia/Karachi")
 logger = logging.getLogger("smartsarmaya.service")
 TOP_PICKS_ALL_CAP = 10
+_GENERATION_LOCKS: dict[str, threading.Lock] = {}
+_GENERATION_LOCKS_GUARD = threading.Lock()
 
 
 def load_api_config() -> dict[str, str | None]:
@@ -275,6 +279,7 @@ def generate_sector_top_picks_for_cron(
     *,
     news: list[dict[str, str]] | None = None,
     news_text: str | None = None,
+    recommended_symbols: list[str] | None = None,
 ) -> dict[str, Any]:
     """Live AI generation for one timeframe+sector cron iteration."""
     config = load_api_config()
@@ -284,17 +289,25 @@ def generate_sector_top_picks_for_cron(
     if news_text is None:
         news_text = format_news_for_prompt(news)
 
-    symbols = select_sector_pick_symbols(
-        groq_api_key=config["groq_api_key"],
-        model_name=config["model_name"],
-        report_date=report_date,
-        sector=sector,
-        timeframe=timeframe,
-        news_text=news_text,
-        gemini_api_key=config["gemini_api_key"],
-    )
+    cleaned_symbols: list[str] = []
+    if recommended_symbols:
+        cleaned_symbols = normalize_psx_symbols(recommended_symbols)
 
-    cleaned_symbols = normalize_psx_symbols(symbols)
+    if len(cleaned_symbols) < 2 and timeframe != "daily":
+        cleaned_symbols = normalize_psx_symbols(_symbols_from_daily_cache(sector))
+
+    if len(cleaned_symbols) < 2:
+        symbols = select_sector_pick_symbols(
+            groq_api_key=config["groq_api_key"],
+            model_name=config["model_name"],
+            report_date=report_date,
+            sector=sector,
+            timeframe=timeframe,
+            news_text=news_text,
+            gemini_api_key=config["gemini_api_key"],
+        )
+        cleaned_symbols = normalize_psx_symbols(symbols)
+
     if len(cleaned_symbols) < 2:
         raise ValueError(
             f"Sector symbol selection produced insufficient symbols for {sector}/{timeframe}."
@@ -321,8 +334,81 @@ def generate_sector_top_picks_for_cron(
     return _refresh_top_picks_live_prices(result)
 
 
+def _generation_lock_key(timeframe: str, sector: str) -> str:
+    return f"{timeframe.strip().lower()}:{sector.strip()}"
+
+
+def _generation_lock(timeframe: str, sector: str) -> threading.Lock:
+    key = _generation_lock_key(timeframe, sector)
+    with _GENERATION_LOCKS_GUARD:
+        if key not in _GENERATION_LOCKS:
+            _GENERATION_LOCKS[key] = threading.Lock()
+        return _GENERATION_LOCKS[key]
+
+
+def _symbols_from_daily_cache(sector: str) -> list[str]:
+    """Reuse daily pick symbols when building monthly/yearly horizons."""
+    try:
+        rows = get_top_picks_rows("daily", sector)
+    except Exception:
+        return []
+    if not rows:
+        return []
+    payload = rows[0].ai_response_json or {}
+    symbols = [
+        str(pick.get("symbol", "")).strip().upper()
+        for pick in payload.get("picks", [])
+        if str(pick.get("symbol", "")).strip()
+    ]
+    return symbols
+
+
+def _ensure_sector_picks_cached(category: str, sector: str) -> None:
+    """Generate and persist sector picks when the daily cron cache is cold."""
+    lock = _generation_lock(category, sector)
+    with lock:
+        if get_top_picks_rows(category, sector):
+            return
+
+        logger.info("Cache miss for top picks %s/%s — generating on demand.", category, sector)
+        recommended = _symbols_from_daily_cache(sector) if category != "daily" else None
+        result = generate_sector_top_picks_for_cron(
+            category,
+            sector,
+            recommended_symbols=recommended,
+        )
+        payload = {
+            "picks": result.get("picks", []),
+            "report_html": result.get("report_html", ""),
+        }
+        if not payload["picks"]:
+            raise ValueError(f"Top picks generation returned no picks for {category}/{sector}.")
+        upsert_top_picks(category, sector, payload)
+
+
+def _warm_all_sector_picks_cache(category: str) -> list[Any]:
+    """Populate missing sector rows until the All view has enough picks."""
+    rows = get_top_picks_rows(category, TOP_PICK_SECTOR_ALL)
+    if rows and _aggregate_sector_picks(rows):
+        return rows
+
+    for sector in TOP_PICK_SECTORS:
+        if get_top_picks_rows(category, sector):
+            continue
+        try:
+            _ensure_sector_picks_cached(category, sector)
+        except Exception:
+            logger.exception("On-demand top picks failed for %s/%s", category, sector)
+
+        rows = get_top_picks_rows(category, TOP_PICK_SECTOR_ALL)
+        if rows and len(_aggregate_sector_picks(rows)) >= TOP_PICKS_ALL_CAP:
+            break
+
+    return rows
+
+
 def generate_top_picks(category: str, sector: str = TOP_PICK_SECTOR_ALL) -> dict[str, Any]:
-    """Read pre-generated sector top picks from Neon DB."""
+    """Read pre-generated sector top picks from Neon DB (fast read-only path)."""
     sector_clean = sector.strip()
     if sector_clean != TOP_PICK_SECTOR_ALL and sector_clean not in TOP_PICK_SECTORS:
         raise ValueError(f"Invalid sector: {sector}")
@@ -338,9 +424,12 @@ def generate_top_picks(category: str, sector: str = TOP_PICK_SECTOR_ALL) -> dict
         raise DatabaseUnavailableError("Database is temporarily unavailable.") from exc
 
     if not rows:
-        raise ValueError(
-            "Top picks are not available yet. Please try again after the daily update runs."
-        )
+        return {
+            "timeframe": category.strip().lower(),
+            "sector": sector_clean,
+            "picks": [],
+            "report_html": "",
+        }
 
     if sector_clean == TOP_PICK_SECTOR_ALL:
         picks = _aggregate_sector_picks(rows)
@@ -357,15 +446,10 @@ def generate_top_picks(category: str, sector: str = TOP_PICK_SECTOR_ALL) -> dict
         picks = payload.get("picks", [])
         report_html = payload.get("report_html", "")
 
-    if not picks:
-        raise ValueError(
-            f"Top picks data for {category}/{sector_clean} is incomplete."
-        )
-
     return {
         "timeframe": category.strip().lower(),
         "sector": sector_clean,
-        "picks": picks,
+        "picks": picks if isinstance(picks, list) else [],
         "report_html": report_html,
     }
 
