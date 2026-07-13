@@ -49,6 +49,7 @@ services:
     name: smartsarmaya-updater-picks
     runtime: python
     rootDir: .
+    # 06:00 UTC = 11:00 PKT — refresh all Top Halal Picks (10 sectors × daily/monthly/yearly)
     schedule: "0 6 * * *"
     buildCommand: pip install -r requirements.txt
     startCommand: python cron_updater.py top_picks
