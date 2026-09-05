@@ -7,6 +7,7 @@ the whole covered universe fresh without exhausting the free model quota.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -75,7 +76,19 @@ def _stale_symbols(limit: int) -> list[str]:
     return never_written + [row[0] for row in written[: limit - len(never_written)]]
 
 
-def run(limit: int = STOCK_PAGE_BATCH) -> dict[str, int]:
+# Groq's free tier refills a small token bucket every minute, so a batch of
+# notes spends most of its time waiting rather than generating. The budget keeps
+# a scheduled run inside the workflow timeout; whatever is not reached this time
+# is simply first in line on the next run, because symbols are ordered stalest
+# first.
+DEFAULT_TIME_BUDGET_SECONDS = 22 * 60
+CONSECUTIVE_FAILURE_LIMIT = 8
+
+
+def run(
+    limit: int = STOCK_PAGE_BATCH,
+    time_budget_seconds: int = DEFAULT_TIME_BUDGET_SECONDS,
+) -> dict[str, int]:
     db.init_db()
     if not llm.is_configured():
         raise RuntimeError("No LLM provider configured: set GROQ_API_KEY or GEMINI_API_KEY.")
@@ -83,9 +96,16 @@ def run(limit: int = STOCK_PAGE_BATCH) -> dict[str, int]:
     symbols = _stale_symbols(limit)
     if not symbols:
         logger.info("No stock notes need refreshing.")
-        return {"written": 0, "failed": 0}
+        return {"written": 0, "failed": 0, "seconds": 0, "stopped_early": ""}
 
-    logger.info("Refreshing %s stock notes.", len(symbols))
+    started = time.monotonic()
+    consecutive_failures = 0
+    stopped_early = ""
+    logger.info(
+        "Refreshing up to %s stock notes (budget %s minutes).",
+        len(symbols),
+        round(time_budget_seconds / 60),
+    )
     headlines = db.recent_news(limit=6)
     news_block = news_module.format_for_prompt(headlines, limit=6)
     events = db.upcoming_events_for(symbols)
@@ -95,6 +115,15 @@ def run(limit: int = STOCK_PAGE_BATCH) -> dict[str, int]:
     batch: list[dict[str, Any]] = []
 
     for index, symbol in enumerate(symbols, start=1):
+        if time.monotonic() - started > time_budget_seconds:
+            stopped_early = "time budget reached"
+            logger.info("Stopping after %s symbols: %s.", index - 1, stopped_early)
+            break
+        if consecutive_failures >= CONSECUTIVE_FAILURE_LIMIT:
+            stopped_early = "provider refusing repeatedly"
+            logger.warning("Stopping after %s symbols: %s.", index - 1, stopped_early)
+            break
+
         with db.session_scope() as session:
             row = session.execute(
                 select(db.Stock).where(db.Stock.symbol == symbol)
@@ -123,8 +152,11 @@ def run(limit: int = STOCK_PAGE_BATCH) -> dict[str, int]:
             )
         except Exception:  # noqa: BLE001 - skip this symbol, keep the run going
             failed += 1
+            consecutive_failures += 1
             logger.warning("[%s/%s] %s: note generation failed.", index, len(symbols), symbol)
             continue
+
+        consecutive_failures = 0
 
         verdict = str(payload.get("verdict", "")).strip().title()
         if verdict not in {"Accumulate", "Hold", "Watch", "Caution"}:
@@ -151,5 +183,17 @@ def run(limit: int = STOCK_PAGE_BATCH) -> dict[str, int]:
     if batch:
         db.upsert_stock_notes(batch)
 
-    logger.info("Stock notes complete: %s written, %s failed.", written, failed)
-    return {"written": written, "failed": failed}
+    elapsed = round(time.monotonic() - started)
+    logger.info(
+        "Stock notes finished in %ss: %s written, %s failed%s.",
+        elapsed,
+        written,
+        failed,
+        f" ({stopped_early})" if stopped_early else "",
+    )
+    return {
+        "written": written,
+        "failed": failed,
+        "seconds": elapsed,
+        "stopped_early": stopped_early,
+    }

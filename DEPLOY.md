@@ -50,7 +50,7 @@ Preview and Development for each.
 
 | Name | Value | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | your Neon pooled connection string, database `psx_v2` | Secret. Use the **pooled** endpoint, the one with `-pooler` in the host. |
+| `DATABASE_URL` | your Neon pooled connection string, database `psx` | Secret. Use the **pooled** endpoint, the one with `-pooler` in the host. |
 | `GROQ_API_KEY` | `gsk_...` | Secret. Powers the portfolio audit and stock analyser. |
 | `GEMINI_API_KEY` | `AQ.Ab8RN6...` | Secret. Fallback when Groq is unavailable. |
 | `GROQ_MODEL_FAST` | `openai/gpt-oss-20b` | |
@@ -129,7 +129,7 @@ when it is satisfied, and the certificate issues shortly after.
 
 **GitHub → Settings → Secrets and variables → Actions → New repository secret:**
 
-- `DATABASE_URL` (the same `psx_v2` string)
+- `DATABASE_URL` (the same `psx` string)
 - `GROQ_API_KEY`
 - `GEMINI_API_KEY`
 
@@ -164,12 +164,29 @@ Two things to know about the schedule:
 
 ### Which database
 
-Production data currently sits in **`psx_v2`**, created during the local run.
-The older `psx` database still holds the previous schema with data frozen at 13
-July 2026, when the Render cron stopped. Nothing reads it any more.
+Production is **`psx`**, the original database. It was migrated in place on 5
+September 2026. The new tables were created, `top_picks` gained a `pick_date`
+column so history accumulates instead of overwriting, and the two superseded
+tables `ticker_data` and `news_and_events` were dropped.
 
-Once the site is live and stable, you can drop `psx` in the Neon console. Do
-that only when you are sure you want the old rows gone.
+Every row of the old database was exported first to
+`psx-agent-backup-psx-2026-09-05/`, which sits beside the repository and is not
+tracked by git. Keep it until you are confident, then delete it.
+
+`psx_v2` is a scratch copy from the local run. Nothing reads it, so drop it in
+the Neon console whenever you like.
+
+Current contents of `psx`:
+
+| Table | Rows |
+| --- | --- |
+| `stocks` (298 Shariah compliant) | 496 |
+| `market_index` | 261 |
+| `corporate_events` / `payouts` | 110 / 46 |
+| `top_picks` across 10 sectors | 30 |
+| `pick_track` | 88 |
+| `stock_notes` | 42 and growing daily |
+| `daily_briefs` | 1 |
 
 ### Rolling back
 
