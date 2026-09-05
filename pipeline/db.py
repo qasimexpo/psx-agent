@@ -421,17 +421,26 @@ def _upsert(session: Session, model, rows: list[dict[str, Any]], key: list[str])
         return 0
 
     if _is_postgres(session):
-        stmt = pg_insert(model).values(rows)
-        update_cols = {
-            col.name: stmt.excluded[col.name]
-            for col in model.__table__.columns
-            if col.name not in key and not col.primary_key
-        }
-        if update_cols:
-            stmt = stmt.on_conflict_do_update(index_elements=key, set_=update_cols)
-        else:
-            stmt = stmt.on_conflict_do_nothing(index_elements=key)
-        session.execute(stmt)
+        # A multi-row INSERT requires every row to carry the same columns.
+        # Callers legitimately send mixed shapes, such as a full indicator row
+        # alongside a short "no history" row, so the batch is grouped by its
+        # column signature and one statement is issued per group.
+        groups: dict[frozenset[str], list[dict[str, Any]]] = {}
+        for row in rows:
+            groups.setdefault(frozenset(row), []).append(row)
+
+        for columns, group in groups.items():
+            stmt = pg_insert(model).values(group)
+            update_cols = {
+                name: stmt.excluded[name]
+                for name in columns
+                if name not in key
+            }
+            if update_cols:
+                stmt = stmt.on_conflict_do_update(index_elements=key, set_=update_cols)
+            else:
+                stmt = stmt.on_conflict_do_nothing(index_elements=key)
+            session.execute(stmt)
         return len(rows)
 
     for row in rows:

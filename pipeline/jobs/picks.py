@@ -18,6 +18,7 @@ database, and any symbol the model invents is discarded.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -25,6 +26,7 @@ from pipeline import db, llm, news as news_module, notify, prompts, psx
 from pipeline.config import (
     PICK_SECTORS,
     PICK_TIMEFRAMES,
+    PICKS_PAUSE_SECONDS,
     PICKS_PER_SECTOR,
     PKT,
     SECTOR_CODE_MAP,
@@ -232,6 +234,11 @@ def run(sectors: list[str] | None = None) -> dict[str, int]:
 
     for index, sector in enumerate(target_sectors, start=1):
         label = f"[{index}/{len(target_sectors)}] {sector}"
+
+        # Stay inside the free tier's tokens-per-minute allowance.
+        if index > 1 and PICKS_PAUSE_SECONDS:
+            time.sleep(PICKS_PAUSE_SECONDS)
+
         try:
             horizons, model_used = _generate_for_sector(sector, report_date, news_block)
         except Exception:  # noqa: BLE001 - one sector must not stop the run

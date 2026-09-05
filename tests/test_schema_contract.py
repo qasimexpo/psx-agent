@@ -132,6 +132,54 @@ def test_every_query_is_valid_postgres(blocks: list[str]) -> None:
     assert not failures, "Invalid PostgreSQL in the frontend:\n\n" + "\n\n".join(failures)
 
 
+DATE_COLUMNS = (
+    "day",
+    "pick_date",
+    "brief_date",
+    "entry_date",
+    "event_date",
+    "book_closure_from",
+    "book_closure_to",
+    "announced_on",
+)
+
+
+def test_date_columns_are_never_stringified_directly() -> None:
+    """Guard against a regression that broke every /brief/<date> URL.
+
+    Both Postgres drivers return a JavaScript Date for a DATE column, and
+    `String(date)` yields "Sat Sep 05 2026 00:00:00 GMT+0500 (Pakistan Standard
+    Time)". That was used in hrefs and in the sitemap, producing unreachable
+    pages. Dates must go through toIsoDay/maybeIsoDay instead.
+    """
+    if not DB_TS.exists():
+        pytest.skip("frontend/src/lib/db.ts not present")
+
+    source = DB_TS.read_text(encoding="utf-8")
+    offenders: list[str] = []
+
+    for column in DATE_COLUMNS:
+        # e.g. String(row.brief_date) or String(rows[0].pick_date)
+        pattern = re.compile(r"String\(\s*rows?(?:\[\d+\])?\.\s*" + column + r"\s*\)")
+        for match in pattern.finditer(source):
+            line = source[: match.start()].count("\n") + 1
+            offenders.append(f"line {line}: {match.group(0)}")
+
+    assert not offenders, (
+        "Date columns must be normalised with toIsoDay(), not String():\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_iso_day_helper_exists() -> None:
+    """The guard above is only meaningful while the helper is present."""
+    if not DB_TS.exists():
+        pytest.skip("frontend/src/lib/db.ts not present")
+    source = DB_TS.read_text(encoding="utf-8")
+    assert "function toIsoDay(" in source, "toIsoDay helper is missing from db.ts"
+    assert "maybeIsoDay" in source, "maybeIsoDay helper is missing from db.ts"
+
+
 def test_pipeline_writes_every_table_the_site_reads(blocks: list[str]) -> None:
     """A table the site reads but nothing ever writes would always look empty."""
     read: set[str] = set()

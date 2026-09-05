@@ -1,37 +1,102 @@
 import "server-only";
 
 import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
 /**
- * Read-only access to the Neon database the Python pipeline writes.
+ * Read-only access to the database the Python pipeline writes.
  *
  * Server components call these directly, so a page view is one indexed SELECT
  * with no API server in between. Every function degrades to an empty result
  * when DATABASE_URL is absent, which keeps `next build` working in CI and on a
  * fresh clone.
+ *
+ * Two drivers are supported. A Neon host uses their HTTP driver, which is what
+ * production runs on. Any other Postgres host uses node-postgres, so the site
+ * can be run locally against a plain Postgres instance without a Neon account.
  */
 
 const connectionString = process.env.DATABASE_URL ?? "";
+const isNeonHost = /\.neon\.(tech|build)/.test(connectionString);
 
 type Row = Record<string, unknown>;
 
-const sql = connectionString ? neon(connectionString) : null;
+const neonSql = connectionString && isNeonHost ? neon(connectionString) : null;
 
-export function isDatabaseConfigured(): boolean {
-  return Boolean(sql);
+// Pooled across hot reloads in development, otherwise every edit leaks a pool.
+const globalForPg = globalThis as unknown as { smartsarmayaPool?: Pool };
+
+function getPool(): Pool | null {
+  if (!connectionString || isNeonHost) return null;
+  if (!globalForPg.smartsarmayaPool) {
+    globalForPg.smartsarmayaPool = new Pool({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 20_000,
+      // Local Postgres normally has no TLS; hosted providers usually require it.
+      ssl: /localhost|127\.0\.0\.1/.test(connectionString)
+        ? undefined
+        : { rejectUnauthorized: false },
+    });
+  }
+  return globalForPg.smartsarmayaPool;
 }
 
+export function isDatabaseConfigured(): boolean {
+  return Boolean(connectionString);
+}
+
+/** Turn a tagged template into a numbered parameter query for node-postgres. */
+function toParameterised(strings: TemplateStringsArray, values: unknown[]): string {
+  return strings.reduce(
+    (acc, part, index) => acc + part + (index < values.length ? `$${index + 1}` : ""),
+    "",
+  );
+}
+
+async function runQuery<T>(
+  strings: TemplateStringsArray,
+  values: unknown[],
+): Promise<T[]> {
+  if (neonSql) {
+    return (await neonSql(strings, ...values)) as T[];
+  }
+  const pool = getPool();
+  if (!pool) return [];
+  const result = await pool.query(toParameterised(strings, values), values);
+  return result.rows as T[];
+}
+
+/**
+ * A failed read degrades to an empty result so one bad section cannot take the
+ * page down. Neon's HTTP endpoint occasionally fails to connect on the first
+ * try, and an empty section is indistinguishable from missing data, so a
+ * transient failure is retried once before giving up.
+ */
 async function query<T = Row>(
   strings: TemplateStringsArray,
   ...values: unknown[]
 ): Promise<T[]> {
-  if (!sql) return [];
-  try {
-    return (await sql(strings, ...values)) as T[];
-  } catch (error) {
-    console.error("[db] query failed:", error);
-    return [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await runQuery<T>(strings, values);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const transient =
+        message.includes("fetch failed") ||
+        message.includes("ECONNRESET") ||
+        message.includes("ETIMEDOUT") ||
+        message.includes("EAI_AGAIN");
+
+      if (attempt === 0 && transient) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        continue;
+      }
+      console.error("[db] query failed:", message);
+      return [];
+    }
   }
+  return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +275,36 @@ const maybeNum = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+/**
+ * Normalise a DATE column to a plain `YYYY-MM-DD` string.
+ *
+ * Both drivers hand back a JavaScript Date for date columns, and stringifying
+ * one yields "Sat Sep 05 2026 00:00:00 GMT+0500 (Pakistan Standard Time)".
+ * That form silently broke every /brief/<date> URL and the sitemap, so every
+ * date leaving this module goes through here.
+ */
+function toIsoDay(value: unknown): string {
+  if (!value) return "";
+  if (value instanceof Date) {
+    // Use the local date parts: the column is a calendar day, not an instant,
+    // and converting through UTC can shift it backwards.
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const maybeIsoDay = (value: unknown): string | null => (value ? toIsoDay(value) : null);
+
 export async function getTickerQuotes(limit = 40): Promise<Quote[]> {
   const rows = await query<Row>`
     SELECT symbol, name, sector_code, sector_name, is_kmi, is_kse100,
@@ -252,7 +347,7 @@ export async function getIndexSnapshot(name = "KSE100"): Promise<IndexSnapshot |
   const spark = Array.isArray(row.sparkline) ? (row.sparkline as unknown[]).map(num) : [];
   return {
     name: String(row.name),
-    day: String(row.day),
+    day: toIsoDay(row.day),
     value: num(row.value),
     change: num(row.change),
     change_pct: num(row.change_pct),
@@ -267,7 +362,7 @@ export async function getIndexHistory(name = "KSE100", days = 90): Promise<{ day
     ORDER BY day DESC
     LIMIT ${days}
   `;
-  return rows.map((row) => ({ day: String(row.day), value: num(row.value) })).reverse();
+  return rows.map((row) => ({ day: toIsoDay(row.day), value: num(row.value) })).reverse();
 }
 
 export async function getMovers(kind: string, limit = 5): Promise<Mover[]> {
@@ -307,7 +402,7 @@ export async function getTopPicks(
     const payload = rows[0].ai_response_json as { picks?: Pick[] } | null;
     return {
       picks: (payload?.picks ?? []).slice(0, limit),
-      pickDate: String(rows[0].pick_date),
+      pickDate: toIsoDay(rows[0].pick_date),
     };
   }
 
@@ -323,7 +418,7 @@ export async function getTopPicks(
   let latest: string | null = null;
 
   for (const row of rows) {
-    const date = String(row.pick_date);
+    const date = toIsoDay(row.pick_date);
     if (!latest || date > latest) latest = date;
     const payload = row.ai_response_json as { picks?: Pick[] } | null;
     for (const pick of payload?.picks ?? []) {
@@ -348,8 +443,8 @@ export async function getUpcomingPayouts(limit = 20): Promise<PayoutRow[]> {
     symbol: String(row.symbol),
     company: String(row.company ?? ""),
     payout: String(row.payout ?? ""),
-    book_closure_from: row.book_closure_from ? String(row.book_closure_from) : null,
-    book_closure_to: row.book_closure_to ? String(row.book_closure_to) : null,
+    book_closure_from: maybeIsoDay(row.book_closure_from),
+    book_closure_to: maybeIsoDay(row.book_closure_to),
     is_kmi: Boolean(row.is_kmi),
   }));
 }
@@ -366,7 +461,7 @@ export async function getUpcomingEvents(limit = 20): Promise<EventRow[]> {
     symbol: String(row.symbol),
     company: String(row.company ?? ""),
     event_type: String(row.event_type ?? ""),
-    event_date: row.event_date ? String(row.event_date) : null,
+    event_date: maybeIsoDay(row.event_date),
     event_time: String(row.event_time ?? ""),
     city: String(row.city ?? ""),
     is_kmi: Boolean(row.is_kmi),
@@ -432,7 +527,7 @@ export async function listBriefs(limit = 30): Promise<BriefRow[]> {
 
 function toBrief(row: Row): BriefRow {
   return {
-    brief_date: String(row.brief_date),
+    brief_date: toIsoDay(row.brief_date),
     session: String(row.session),
     headline: String(row.headline ?? ""),
     summary: String(row.summary ?? ""),
@@ -549,7 +644,7 @@ export async function getTrackedPicks(limit = 40): Promise<TrackedPick[]> {
     symbol: String(row.symbol),
     timeframe: String(row.timeframe),
     sector: String(row.sector),
-    entry_date: String(row.entry_date),
+    entry_date: toIsoDay(row.entry_date),
     entry_price: num(row.entry_price),
     last_price: num(row.last_price),
     return_pct: num(row.return_pct),
@@ -667,12 +762,12 @@ export async function getEventsFor(symbols: string[]): Promise<Record<string, st
   for (const row of payouts) {
     const symbol = String(row.symbol);
     out[symbol] = out[symbol] ?? [];
-    out[symbol].push(`payout ${row.payout}, book closure ${row.book_closure_from}`);
+    out[symbol].push(`payout ${row.payout}, book closure ${toIsoDay(row.book_closure_from)}`);
   }
   for (const row of events) {
     const symbol = String(row.symbol);
     out[symbol] = out[symbol] ?? [];
-    out[symbol].push(`${row.event_type} on ${row.event_date}`);
+    out[symbol].push(`${row.event_type} on ${toIsoDay(row.event_date)}`);
   }
   return out;
 }

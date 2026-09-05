@@ -89,6 +89,12 @@ export default function SymbolInput({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={() => {
+          // Delayed so a click on a suggestion still registers before the list
+          // unmounts. Without this the open list sits over the next field and
+          // swallows the first click.
+          window.setTimeout(() => setOpen(false), 120);
+        }}
         onKeyDown={(event) => {
           if (!visible) return;
           if (event.key === "ArrowDown") {

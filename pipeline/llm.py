@@ -19,7 +19,11 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from pipeline.config import GEMINI_FALLBACK_MODELS, GROQ_MODEL_FAST, GROQ_MODEL_QUALITY
+from pipeline.config import (
+    GEMINI_FALLBACK_MODELS,
+    GROQ_FAST_FALLBACKS,
+    GROQ_QUALITY_FALLBACKS,
+)
 
 load_dotenv()
 logger = logging.getLogger("smartsarmaya.llm")
@@ -122,19 +126,28 @@ def complete_json(
 
     Tries Groq, then Gemini. Raises LlmUnavailableError when neither works.
     """
-    model = GROQ_MODEL_FAST if fast else GROQ_MODEL_QUALITY
+    candidates = GROQ_FAST_FALLBACKS if fast else GROQ_QUALITY_FALLBACKS
+    # Preserve order while removing duplicates from the configured override.
+    models = list(dict.fromkeys(candidates))
     errors: list[str] = []
 
     if _groq_key():
-        for attempt in range(MAX_ATTEMPTS):
-            try:
-                raw = _call_groq(system, user, model, max_tokens)
-                return _extract_json(raw), model
-            except Exception as exc:  # noqa: BLE001 - fall through to Gemini
-                errors.append(f"groq/{model}: {exc}")
-                logger.warning("Groq attempt %s failed: %s", attempt + 1, exc)
-                if attempt < MAX_ATTEMPTS - 1:
-                    time.sleep(RETRY_DELAY)
+        for model in models:
+            for attempt in range(MAX_ATTEMPTS):
+                try:
+                    raw = _call_groq(system, user, model, max_tokens)
+                    return _extract_json(raw), model
+                except Exception as exc:  # noqa: BLE001 - try the next model
+                    errors.append(f"groq/{model}: {exc}")
+                    message = str(exc)
+                    # A retired or unavailable model will never succeed, so move
+                    # on immediately instead of burning the retry budget.
+                    if "model_not_found" in message or "does not exist" in message:
+                        logger.warning("Groq model %s is unavailable; trying the next one.", model)
+                        break
+                    logger.warning("Groq %s attempt %s failed: %s", model, attempt + 1, exc)
+                    if attempt < MAX_ATTEMPTS - 1:
+                        time.sleep(RETRY_DELAY)
     else:
         errors.append("groq: GROQ_API_KEY not set")
 

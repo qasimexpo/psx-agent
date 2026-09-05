@@ -10,7 +10,18 @@ import "server-only";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
-const GROQ_MODEL = process.env.GROQ_MODEL_FAST ?? "llama-3.1-8b-instant";
+/**
+ * Groq retires models regularly, and a retired name returns 404 rather than
+ * degrading, which is how generation broke silently before. Each name is tried
+ * in order so one retirement costs quality instead of the whole feature.
+ */
+const GROQ_MODELS = [
+  process.env.GROQ_MODEL_FAST,
+  "openai/gpt-oss-20b",
+  "openai/gpt-oss-120b",
+  "qwen/qwen3.8-27b",
+].filter((name): name is string => Boolean(name));
+
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 const TIMEOUT_MS = 25_000;
@@ -51,7 +62,12 @@ async function withTimeout<T>(work: (signal: AbortSignal) => Promise<T>): Promis
   }
 }
 
-async function callGroq(system: string, user: string, maxTokens: number): Promise<string> {
+async function callGroqModel(
+  system: string,
+  user: string,
+  maxTokens: number,
+  model: string,
+): Promise<string> {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new AiUnavailableError("GROQ_API_KEY is not set.");
 
@@ -64,7 +80,7 @@ async function callGroq(system: string, user: string, maxTokens: number): Promis
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model,
         temperature: 0.4,
         max_tokens: maxTokens,
         response_format: { type: "json_object" },
@@ -78,13 +94,27 @@ async function callGroq(system: string, user: string, maxTokens: number): Promis
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new AiUnavailableError(`Groq returned ${response.status}: ${detail.slice(0, 200)}`);
+    throw new AiUnavailableError(`Groq ${model} returned ${response.status}: ${detail.slice(0, 200)}`);
   }
 
   const payload = (await response.json()) as {
     choices?: { message?: { content?: string } }[];
   };
   return payload.choices?.[0]?.message?.content ?? "";
+}
+
+async function callGroq(system: string, user: string, maxTokens: number): Promise<string> {
+  let lastError: Error | null = null;
+  for (const model of GROQ_MODELS) {
+    try {
+      return await callGroqModel(system, user, maxTokens, model);
+    } catch (error) {
+      lastError = error as Error;
+      // A 404 means the model is gone; anything else is worth reporting as is.
+      if (!lastError.message.includes("404")) throw lastError;
+    }
+  }
+  throw lastError ?? new AiUnavailableError("No Groq model was available.");
 }
 
 async function callGemini(system: string, user: string, maxTokens: number): Promise<string> {

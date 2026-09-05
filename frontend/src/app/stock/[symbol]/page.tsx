@@ -276,16 +276,18 @@ export default async function StockPage({
           <p className="mt-2 leading-relaxed text-slate-700">
             {stock.is_kmi ? (
               <>
-                {stock.name} is a constituent of the KMI All Shares Islamic Index, the
-                Shariah-screened index published by the Pakistan Stock Exchange. On that basis it
-                passes the exchange&apos;s Shariah screen. Index membership is reviewed periodically,
-                and this page reflects the latest published list.
+                {stock.name}{" "}
+                is a constituent of the KMI All Shares Islamic Index, the Shariah-screened index
+                published by the Pakistan Stock Exchange. On that basis it passes the
+                exchange&apos;s Shariah screen. Index membership is reviewed periodically, and this
+                page reflects the latest published list.
               </>
             ) : (
               <>
-                {stock.name} is not currently a constituent of the KMI All Shares Islamic Index, so
-                it does not pass the Pakistan Stock Exchange&apos;s Shariah screen. That usually
-                reflects the company&apos;s business activity or its debt and interest income ratios.
+                {stock.name}{" "}
+                is not currently a constituent of the KMI All Shares Islamic Index, so it does not
+                pass the Pakistan Stock Exchange&apos;s Shariah screen. That usually reflects the
+                company&apos;s business activity or its debt and interest income ratios.
               </>
             )}
           </p>

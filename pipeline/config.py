@@ -19,8 +19,35 @@ SITE_URL = os.environ.get("SITE_URL", "https://www.smartsarmaya.com").rstrip("/"
 # --- AI models ------------------------------------------------------------
 # Cron work is not latency sensitive, so it uses the larger free Groq model.
 # The interactive endpoints in the Next.js app use the small fast one.
-GROQ_MODEL_QUALITY = os.environ.get("GROQ_MODEL_QUALITY", "llama-3.3-70b-versatile")
-GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "llama-3.1-8b-instant")
+#
+# Groq retires models regularly. The Llama 3.x names this project used before
+# now return 404, which silently broke generation. Each setting is therefore a
+# list tried in order, so one retirement degrades quality instead of stopping
+# the pipeline. Check https://console.groq.com/docs/models when all of them go.
+GROQ_MODEL_QUALITY = os.environ.get("GROQ_MODEL_QUALITY", "openai/gpt-oss-120b")
+GROQ_MODEL_FAST = os.environ.get("GROQ_MODEL_FAST", "openai/gpt-oss-20b")
+
+# Verified against the free tier on 5 Sep 2026: the gpt-oss models allow 8000
+# tokens per minute, which comfortably fits a sector generation. Qwen is
+# deliberately excluded because its 1000 output-tokens-per-minute cap rejects
+# every request this pipeline makes.
+GROQ_QUALITY_FALLBACKS = (
+    GROQ_MODEL_QUALITY,
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "groq/compound-mini",
+)
+GROQ_FAST_FALLBACKS = (
+    GROQ_MODEL_FAST,
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+    "groq/compound-mini",
+)
+
+# Groq's free tier allows 8000 tokens a minute. One sector generation uses
+# roughly 5,600, so sector calls are spaced out rather than issued back to back.
+PICKS_PAUSE_SECONDS = int(os.environ.get("PICKS_PAUSE_SECONDS", "30"))
+
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash")
 
 # --- Coverage -------------------------------------------------------------
