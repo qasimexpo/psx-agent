@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 
 from pipeline import db
-from pipeline.config import PKT, setup_logging
+from pipeline.config import PKT, STOCK_PAGE_BATCH, setup_logging
 
 logger = setup_logging("smartsarmaya.run")
 
@@ -64,7 +64,7 @@ def _brief(args: argparse.Namespace) -> dict:
 def _stocks(args: argparse.Namespace) -> dict:
     from pipeline.jobs import stocks
 
-    return stocks.run(limit=args.limit or 40)
+    return stocks.run(limit=args.limit or STOCK_PAGE_BATCH)
 
 
 def _health(args: argparse.Namespace) -> dict:

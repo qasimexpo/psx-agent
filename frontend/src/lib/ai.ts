@@ -122,10 +122,11 @@ async function callGemini(system: string, user: string, maxTokens: number): Prom
   if (!key) throw new AiUnavailableError("GEMINI_API_KEY is not set.");
 
   const response = await withTimeout((signal) =>
-    fetch(`${GEMINI_URL}/${GEMINI_MODEL}:generateContent?key=${key}`, {
+    fetch(`${GEMINI_URL}/${GEMINI_MODEL}:generateContent`, {
       method: "POST",
       signal,
-      headers: { "Content-Type": "application/json" },
+      // Newer AQ. style keys are only accepted in this header, not as ?key=
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],

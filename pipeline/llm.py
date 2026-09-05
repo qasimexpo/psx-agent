@@ -92,26 +92,58 @@ def _call_groq(system: str, user: str, model: str, max_tokens: int) -> str:
     return response.choices[0].message.content or ""
 
 
-def _call_gemini(system: str, user: str, max_tokens: int) -> str:
-    import google.generativeai as genai
+GEMINI_ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+)
+GEMINI_TIMEOUT = 60
 
-    genai.configure(api_key=_gemini_key())
+
+def _call_gemini(system: str, user: str, max_tokens: int) -> str:
+    """Call Gemini over REST.
+
+    The google-generativeai package is deprecated and its auth handling does not
+    accept the newer `AQ.` style keys that AI Studio now issues. A direct v1beta
+    request with the key in the x-goog-api-key header does, and JSON mode is
+    only available on v1beta.
+    """
+    import requests
+
+    key = _gemini_key()
     last_error: Exception | None = None
+
     for model_name in GEMINI_FALLBACK_MODELS:
         try:
-            model = genai.GenerativeModel(model_name, system_instruction=system)
-            response = model.generate_content(
-                user,
-                generation_config={
-                    "temperature": 0.4,
-                    "max_output_tokens": max_tokens,
-                    "response_mime_type": "application/json",
+            response = requests.post(
+                GEMINI_ENDPOINT.format(model=model_name),
+                headers={"Content-Type": "application/json", "x-goog-api-key": key},
+                json={
+                    "systemInstruction": {"parts": [{"text": system}]},
+                    "contents": [{"role": "user", "parts": [{"text": user}]}],
+                    "generationConfig": {
+                        "temperature": 0.4,
+                        "maxOutputTokens": max_tokens,
+                        "responseMimeType": "application/json",
+                    },
                 },
+                timeout=GEMINI_TIMEOUT,
             )
-            return response.text or ""
+            if response.status_code != 200:
+                raise LlmUnavailableError(
+                    f"HTTP {response.status_code}: {response.text[:200]}"
+                )
+            payload = response.json()
+            candidates = payload.get("candidates") or []
+            if not candidates:
+                raise LlmUnavailableError("Gemini returned no candidates.")
+            parts = candidates[0].get("content", {}).get("parts") or []
+            text = "".join(part.get("text", "") for part in parts)
+            if not text.strip():
+                raise LlmUnavailableError("Gemini returned an empty response.")
+            return text
         except Exception as exc:  # noqa: BLE001 - try the next model
             last_error = exc
             logger.warning("Gemini model %s failed: %s", model_name, exc)
+
     raise LlmUnavailableError(f"All Gemini models failed: {last_error}")
 
 

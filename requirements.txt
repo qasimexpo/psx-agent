@@ -6,6 +6,7 @@ python-dotenv>=1.0.0
 SQLAlchemy>=2.0.0
 psycopg2-binary>=2.9.9
 groq>=0.9.0
-google-generativeai>=0.8.0
+# Gemini is called over plain REST (see pipeline/llm.py). The official SDK is
+# deprecated and rejects the newer AQ. style keys AI Studio now issues.
 # ZoneInfo needs an explicit tz database on Windows and on slim containers.
 tzdata>=2024.1

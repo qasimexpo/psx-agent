@@ -48,7 +48,10 @@ GROQ_FAST_FALLBACKS = (
 # roughly 5,600, so sector calls are spaced out rather than issued back to back.
 PICKS_PAUSE_SECONDS = int(os.environ.get("PICKS_PAUSE_SECONDS", "30"))
 
-GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash")
+# Verified live on 5 Sep 2026. "gemini-flash-latest" is excluded: it is an alias
+# that was returning 503 under load, which is the opposite of what a fallback
+# should do.
+GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite")
 
 # --- Coverage -------------------------------------------------------------
 # Sectors surfaced in the Top Halal Picks selector. Names are display labels;
@@ -128,8 +131,11 @@ SECTOR_CODE_NAMES: dict[str, str] = {
     "0839": "Apparel",
 }
 
-# Number of symbols per stock detail page refresh batch (weekly job).
-STOCK_PAGE_BATCH = 40
+# Symbols refreshed per run of the stock notes job. At 60 a day the whole
+# Shariah-compliant universe is covered in about five days and then keeps
+# rotating, which is what stops the stock pages going stale. Groq allows 1000
+# requests a day and the full schedule uses well under a hundred.
+STOCK_PAGE_BATCH = int(os.environ.get("STOCK_PAGE_BATCH", "60"))
 
 # How many trading days of end-of-day history to keep per symbol.
 EOD_HISTORY_DAYS = 400
