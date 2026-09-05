@@ -809,6 +809,86 @@ def upcoming_events_for(symbols: Iterable[str], within_days: int = 45) -> dict[s
     return out
 
 
+def latest_movers(limit: int = 3) -> dict[str, list[dict[str, Any]]]:
+    """The current gainers, losers and most active, for the closing post."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    with session_scope() as session:
+        for kind in ("gainers", "losers", "most_active"):
+            rows = (
+                session.execute(
+                    select(Mover)
+                    .where(Mover.kind == kind)
+                    .order_by(Mover.rank)
+                    .limit(limit)
+                )
+                .scalars()
+                .all()
+            )
+            out[kind] = [
+                {
+                    "symbol": row.symbol,
+                    "name": row.name,
+                    "price": row.price,
+                    "change_pct": row.change_pct,
+                    "is_kmi": row.is_kmi,
+                }
+                for row in rows
+            ]
+    return out
+
+
+def tracked_positions(limit: int = 60) -> list[dict[str, Any]]:
+    """Open tracked picks, best return first. Used by the weekly social post."""
+    with session_scope() as session:
+        rows = (
+            session.execute(
+                select(PickTrack)
+                .where(PickTrack.status == "open")
+                .order_by(PickTrack.return_pct.desc())
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "symbol": row.symbol,
+                "timeframe": row.timeframe,
+                "sector": row.sector,
+                "entry_date": row.entry_date.isoformat(),
+                "entry_price": row.entry_price,
+                "last_price": row.last_price,
+                "return_pct": row.return_pct,
+                "days_held": row.days_held,
+            }
+            for row in rows
+        ]
+
+
+def freshness() -> dict[str, Any]:
+    """Newest timestamp per kind of content, for the monitor job.
+
+    The whole point of this function is the failure recorded in
+    PROJECT-HISTORY section 3: a dead cron looks exactly like a working one
+    unless something reads these values and complains.
+    """
+    with session_scope() as session:
+        def newest(column):
+            try:
+                return session.execute(select(func.max(column))).scalar_one()
+            except SQLAlchemyError:
+                return None
+
+        return {
+            "quote_at": newest(Stock.quote_at),
+            "tech_at": newest(Stock.tech_at),
+            "brief_date": newest(DailyBrief.brief_date),
+            "pick_date": newest(TopPick.pick_date),
+            "note_at": newest(StockNote.updated_at),
+            "event_at": newest(CorporateEvent.updated_at),
+        }
+
+
 def table_counts() -> dict[str, int]:
     """Row counts for every table, used by the pipeline health check."""
     models = [

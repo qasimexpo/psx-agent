@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from pipeline import db, llm, news as news_module, notify, prompts
+from pipeline import db, llm, news as news_module, notify, prompts, social
 from pipeline.config import PKT
 
 logger = logging.getLogger("smartsarmaya.jobs.brief")
@@ -171,11 +171,19 @@ def run(session_name: str = "closing") -> dict[str, Any]:
     db.upsert_brief(row)
     logger.info("Stored %s brief for %s via %s: %s", session_name, today, model_used, row["headline"])
 
-    broadcast = notify.broadcast_brief({**row, "brief_date": today.isoformat()})
+    published = {**row, "brief_date": today.isoformat(), "session": session_name}
+    broadcast = notify.broadcast_brief(published)
+
+    # The closing edition carries the day's gainers and losers, because a
+    # scoreboard is the post people actually engage with. The morning edition
+    # goes out as a headline, before there is anything to score.
+    movers = db.latest_movers() if session_name == "closing" else None
+    social_results = social.broadcast(social.brief_post(published, movers))
 
     return {
         "date": today.isoformat(),
         "session": session_name,
         "headline": row["headline"],
         "telegram": broadcast,
+        "social": social_results,
     }

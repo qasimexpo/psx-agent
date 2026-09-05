@@ -100,6 +100,46 @@ def broadcast_brief(brief: dict[str, Any]) -> bool:
     return send("\n".join(lines))
 
 
+def broadcast_track_record(board: dict[str, Any], positions: list[dict[str, Any]]) -> bool:
+    """Publish the running record, winners and losers together.
+
+    Every other picks service in this market publishes only what worked. Being
+    the one that does not is the whole marketing strategy, so this message
+    deliberately shows the bottom of the table as well as the top.
+    """
+    if not positions:
+        return False
+
+    ranked = sorted(positions, key=lambda row: row.get("return_pct") or 0, reverse=True)
+    lines = [
+        "<b>Halal picks: the running record</b>",
+        "",
+        "Every open pick, marked to market. Winners and losers.",
+        "",
+    ]
+    for row in ranked:
+        symbol = _escape(row.get("symbol", ""))
+        value = float(row.get("return_pct") or 0)
+        marker = "\U0001F7E2" if value >= 0 else "\U0001F534"
+        lines.append(f"{marker} <b>{symbol}</b> {value:+.1f}%  ({row.get('days_held', 0)}d)")
+
+    total = board.get("total") or 0
+    if total:
+        lines += [
+            "",
+            f"{board.get('hit_rate')}% of {total} picks in profit, "
+            f"average {float(board.get('avg_return') or 0):+.1f}%.",
+        ]
+
+    lines += [
+        "",
+        f'<a href="{SITE_URL}/track-record">See the full track record</a>',
+        "",
+        "<i>Educational only. Not financial advice.</i>",
+    ]
+    return send("\n".join(lines))
+
+
 def broadcast_picks(picks: list[dict[str, Any]], *, horizon: str, pick_date: str) -> bool:
     """Announce the day's halal picks."""
     if not picks:

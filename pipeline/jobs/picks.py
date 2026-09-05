@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from pipeline import db, llm, news as news_module, notify, prompts, psx
+from pipeline import db, llm, news as news_module, notify, prompts, psx, social
 from pipeline.config import (
     PICK_SECTORS,
     PICK_TIMEFRAMES,
@@ -308,8 +308,12 @@ def run(sectors: list[str] | None = None) -> dict[str, int]:
                 seen_symbols.add(pick["symbol"])
                 merged.append(pick)
         if merged:
+            pretty_date = today.strftime("%d %B %Y")
             broadcast = notify.broadcast_picks(
-                merged, horizon="daily", pick_date=today.strftime("%d %B %Y")
+                merged, horizon="daily", pick_date=pretty_date
+            )
+            social.broadcast(
+                social.picks_post(merged, horizon="daily", pick_date=pretty_date)
             )
 
     logger.info(
@@ -338,4 +342,16 @@ def run_scorecard_only() -> dict[str, Any]:
     marked = db.refresh_pick_track(db.price_lookup(), today)
     board = db.scorecard()
     logger.info("Scorecard refreshed: %s positions, hit rate %s%%.", marked["updated"], board["hit_rate"])
-    return {**marked, **board}
+
+    # Once a week, publish the running record including the losers. Nobody else
+    # in this market does that, and it is the post that earns the trust the
+    # rest of the site trades on. Friday, because it closes the trading week.
+    posted = False
+    if today.weekday() == 4 and board.get("total"):
+        positions = db.tracked_positions()
+        if positions:
+            social.broadcast(social.track_record_post(board, positions))
+            notify.broadcast_track_record(board, positions)
+            posted = True
+
+    return {**marked, **board, "weekly_post": posted}

@@ -7,6 +7,7 @@
     python -m pipeline.run scorecard     mark open picks to market
     python -m pipeline.run brief --session morning|closing
     python -m pipeline.run stocks        AI notes for stock pages
+    python -m pipeline.run monitor       fail loudly if any content is stale
     python -m pipeline.run health        row counts, no writes
     python -m pipeline.run bootstrap     first run: everything, in order
 """
@@ -67,6 +68,12 @@ def _stocks(args: argparse.Namespace) -> dict:
     return stocks.run(limit=args.limit or STOCK_PAGE_BATCH)
 
 
+def _monitor(args: argparse.Namespace) -> dict:
+    from pipeline.jobs import monitor
+
+    return monitor.run()
+
+
 def _health(args: argparse.Namespace) -> dict:
     db.init_db()
     counts = db.table_counts()
@@ -100,6 +107,7 @@ JOBS = {
     "scorecard": _scorecard,
     "brief": _brief,
     "stocks": _stocks,
+    "monitor": _monitor,
     "health": _health,
     "bootstrap": _bootstrap,
 }
