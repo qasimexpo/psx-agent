@@ -1,4 +1,4 @@
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, SOCIAL_LINKS } from "@/lib/site";
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -11,6 +11,10 @@ const structuredData = {
       logo: `${SITE_URL}/images/logo.jpg`,
       description: SITE_DESCRIPTION,
       areaServed: { "@type": "Country", name: "Pakistan" },
+      // sameAs is how Google ties the social profiles to this brand.
+      ...(SOCIAL_LINKS.length
+        ? { sameAs: SOCIAL_LINKS.map((link) => link.href) }
+        : {}),
     },
     {
       "@type": "WebSite",

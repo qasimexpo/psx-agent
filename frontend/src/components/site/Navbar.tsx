@@ -8,7 +8,7 @@ import { IMAGES } from "@/lib/images";
 
 const LINKS = [
   { href: "/#audit", label: "Portfolio audit" },
-  { href: "/#picks", label: "Halal picks" },
+  { href: "/picks", label: "Halal picks" },
   { href: "/brief", label: "Daily brief" },
   { href: "/stocks", label: "Stocks" },
   { href: "/track-record", label: "Track record" },

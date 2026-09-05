@@ -10,6 +10,7 @@ import PortfolioAudit from "@/components/tools/PortfolioAudit";
 import StockAnalyzer from "@/components/tools/StockAnalyzer";
 import { Disclaimer } from "@/components/ui/Primitives";
 import GoogleAd from "@/components/GoogleAd";
+import { AD_SLOT_BOTTOM, AD_SLOT_TOP } from "@/lib/adsense";
 import { SECTOR_ALL, SECTOR_NAMES } from "@/lib/sectors";
 import {
   getIndexSnapshot,
@@ -120,7 +121,7 @@ export default async function Page() {
 
       <section className="px-4 py-2 sm:px-6">
         <div className="mx-auto max-w-6xl">
-          <GoogleAd slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_TOP} />
+          <GoogleAd slot={AD_SLOT_TOP} />
         </div>
       </section>
 
@@ -163,7 +164,7 @@ export default async function Page() {
 
       <section className="px-4 pb-10 sm:px-6">
         <div className="mx-auto max-w-6xl space-y-4">
-          <GoogleAd slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BOTTOM} />
+          <GoogleAd slot={AD_SLOT_BOTTOM} />
           <Disclaimer />
         </div>
       </section>

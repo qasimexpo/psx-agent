@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { AlertCircle, Download, Loader2, Plus, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import SymbolInput from "@/components/tools/SymbolInput";
 import { analyzePortfolio, type PortfolioResult, type ShareInput } from "@/lib/clientApi";
+import { trackEvent } from "@/lib/analytics";
 import { changeClass, money, percent, pkr, signedMoney } from "@/lib/format";
 import { SectionHeading, SymbolLink } from "@/components/ui/Primitives";
 
@@ -74,10 +75,12 @@ export default function PortfolioAudit() {
     setResult(null);
     try {
       setResult(await analyzePortfolio(shares, horizon));
+      trackEvent("portfolio_audit", { holdings: shares.length, horizon });
       requestAnimationFrame(() => {
         document.getElementById("audit-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     } catch (err) {
+      trackEvent("portfolio_audit_failed", { holdings: shares.length });
       setError(err instanceof Error ? err.message : "Analysis failed.");
     } finally {
       setLoading(false);

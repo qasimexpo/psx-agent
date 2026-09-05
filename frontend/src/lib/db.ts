@@ -611,6 +611,30 @@ export async function listIndexableSymbols(limit = 400): Promise<
   }));
 }
 
+/**
+ * Other companies in the same PSX sector. Programmatic pages fail to index
+ * mainly because nothing links to them, so every stock page links out to its
+ * neighbours.
+ */
+export async function listSectorPeers(
+  symbol: string,
+  sectorCode: string,
+  limit = 6,
+): Promise<Quote[]> {
+  if (!sectorCode) return [];
+  const rows = await query<Row>`
+    SELECT symbol, name, sector_code, sector_name, is_kmi, is_kse100,
+           current_price, change, change_pct, volume, high, low
+    FROM stocks
+    WHERE sector_code = ${sectorCode}
+      AND symbol <> ${symbol.toUpperCase()}
+      AND current_price > 0 AND is_debt = false AND is_etf = false
+    ORDER BY volume DESC
+    LIMIT ${limit}
+  `;
+  return rows.map(toQuote);
+}
+
 export async function getScorecard(): Promise<Scorecard> {
   const rows = await query<Row>`
     SELECT COUNT(*)::int AS total,

@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import PicksSection, { type PicksBundle } from "@/components/picks/PicksSection";
 import { Disclaimer } from "@/components/ui/Primitives";
+import GoogleAd from "@/components/GoogleAd";
+import { AD_SLOT_ARTICLE } from "@/lib/adsense";
+import { ogImages } from "@/lib/og";
 import { getTickerQuotes, getTopPicks } from "@/lib/db";
 import { PICK_SECTORS, SECTOR_ALL, SECTOR_NAMES, sectorBySlug } from "@/lib/sectors";
 import { SITE_URL } from "@/lib/site";
@@ -36,6 +39,11 @@ export async function generateMetadata({
       description: sector.blurb,
       url: `${SITE_URL}/picks/${sector.slug}`,
       type: "website",
+      images: ogImages({ type: "picks", sector: sector.slug }),
+    },
+    twitter: {
+      card: "summary_large_image",
+      images: ogImages({ type: "picks", sector: sector.slug }),
     },
   };
 }
@@ -65,8 +73,27 @@ export default async function SectorPicksPage({
   const livePrices: Record<string, number> = {};
   for (const quote of quotes) livePrices[quote.symbol] = quote.current_price;
 
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Halal picks", item: `${SITE_URL}/picks` },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: sector.title,
+        item: `${SITE_URL}/picks/${sector.slug}`,
+      },
+    ],
+  };
+
   return (
     <div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }}
+      />
       <header className="panel-dark px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-6xl">
           <Link
@@ -116,6 +143,8 @@ export default async function SectorPicksPage({
               See how past picks performed
             </Link>
           </div>
+
+          <GoogleAd slot={AD_SLOT_ARTICLE} className="mt-6" />
 
           <Disclaimer className="mt-6" />
         </div>

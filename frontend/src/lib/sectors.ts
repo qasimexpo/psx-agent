@@ -95,6 +95,41 @@ export function sectorBySlug(slug: string): SectorMeta | undefined {
   return PICK_SECTORS.find((sector) => sector.slug === slug);
 }
 
+/**
+ * PSX sector codes to pick-sector slugs. Mirrors SECTOR_CODE_MAP in
+ * pipeline/config.py, and exists so a stock page can link to the sector page
+ * that covers it without matching on display names, which differ between the
+ * exchange's directory and our own labels.
+ */
+const SECTOR_CODE_SLUGS: Record<string, string> = {
+  "0807": "islamic-banking",
+  "0804": "cement",
+  "0820": "energy",
+  "0821": "energy",
+  "0825": "energy",
+  "0824": "power-generation",
+  "0828": "technology",
+  "0809": "fertilizer",
+  "0823": "pharmaceuticals",
+  "0801": "automobile",
+  "0802": "automobile",
+  "0829": "textile",
+  "0830": "textile",
+  "0831": "textile",
+  "0810": "food-personal-care",
+};
+
+/**
+ * The sector page for a stock, or null when it has none. Islamic banking is
+ * the exception: the sector page only lists KMI constituents, so a
+ * conventional bank must not be linked into it.
+ */
+export function slugForSectorCode(code: string, isKmi: boolean): string | null {
+  const slug = SECTOR_CODE_SLUGS[code] ?? null;
+  if (slug === "islamic-banking" && !isKmi) return null;
+  return slug;
+}
+
 export function slugForSector(name: string): string | null {
   return PICK_SECTORS.find((sector) => sector.name === name)?.slug ?? null;
 }

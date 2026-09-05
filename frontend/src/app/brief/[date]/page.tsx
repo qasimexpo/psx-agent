@@ -5,6 +5,9 @@ import { ArrowLeft, Newspaper } from "lucide-react";
 import { getBriefByDate, listBriefs } from "@/lib/db";
 import { changeClass, longDate, money, percent } from "@/lib/format";
 import { Disclaimer, SymbolLink } from "@/components/ui/Primitives";
+import GoogleAd from "@/components/GoogleAd";
+import { AD_SLOT_ARTICLE } from "@/lib/adsense";
+import { ogImages } from "@/lib/og";
 import { SITE_URL } from "@/lib/site";
 
 export const revalidate = 600;
@@ -44,6 +47,11 @@ export async function generateMetadata({
       url: `${SITE_URL}/brief/${date}`,
       type: "article",
       publishedTime: date,
+      images: ogImages({ type: "brief", date }),
+    },
+    twitter: {
+      card: "summary_large_image",
+      images: ogImages({ type: "brief", date }),
     },
   };
 }
@@ -75,11 +83,30 @@ export default async function BriefPage({
     mainEntityOfPage: `${SITE_URL}/brief/${brief.brief_date}`,
   };
 
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Market brief", item: `${SITE_URL}/brief` },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: brief.brief_date,
+        item: `${SITE_URL}/brief/${brief.brief_date}`,
+      },
+    ],
+  };
+
   return (
     <article className="px-4 py-12 sm:px-6">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }}
       />
 
       <div className="mx-auto max-w-3xl">
@@ -160,6 +187,8 @@ export default async function BriefPage({
             </div>
           </div>
         ) : null}
+
+        <GoogleAd slot={AD_SLOT_ARTICLE} className="mt-8" />
 
         <Disclaimer className="mt-8 border-t border-slate-200 pt-5" />
       </div>

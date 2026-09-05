@@ -7,6 +7,7 @@ import {
   getStock,
   getStockNote,
   listIndexableSymbols,
+  listSectorPeers,
 } from "@/lib/db";
 import {
   changeClass,
@@ -17,6 +18,10 @@ import {
   relativeTime,
 } from "@/lib/format";
 import { Disclaimer, RangeBar } from "@/components/ui/Primitives";
+import GoogleAd from "@/components/GoogleAd";
+import { AD_SLOT_ARTICLE } from "@/lib/adsense";
+import { ogImages } from "@/lib/og";
+import { slugForSectorCode } from "@/lib/sectors";
 import { SITE_URL } from "@/lib/site";
 
 /**
@@ -53,6 +58,11 @@ export async function generateMetadata({
       description: `Live PSX price, technical position and Shariah status for ${stock.name}.`,
       url: `${SITE_URL}/stock/${clean}`,
       type: "website",
+      images: ogImages({ type: "stock", symbol: clean }),
+    },
+    twitter: {
+      card: "summary_large_image",
+      images: ogImages({ type: "stock", symbol: clean }),
     },
   };
 }
@@ -69,9 +79,14 @@ export default async function StockPage({
   const stock = await getStock(clean);
   if (!stock) notFound();
 
-  const [note, events] = await Promise.all([getStockNote(clean), getEventsFor([clean])]);
+  const [note, events, peers] = await Promise.all([
+    getStockNote(clean),
+    getEventsFor([clean]),
+    listSectorPeers(clean, stock.sector_code),
+  ]);
   const position = rangePosition(stock.current_price, stock.low_52w, stock.high_52w);
   const symbolEvents = events[clean] ?? [];
+  const sectorSlug = slugForSectorCode(stock.sector_code, stock.is_kmi);
 
   const schema = {
     "@context": "https://schema.org",
@@ -81,6 +96,18 @@ export default async function StockPage({
     url: `${SITE_URL}/stock/${clean}`,
     category: stock.sector_name,
     provider: { "@type": "Organization", name: "Pakistan Stock Exchange" },
+  };
+
+  // Breadcrumbs give Google the site hierarchy and win the breadcrumb trail
+  // in the result snippet, which lifts click-through on long-tail queries.
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Stocks", item: `${SITE_URL}/stocks` },
+      { "@type": "ListItem", position: 3, name: clean, item: `${SITE_URL}/stock/${clean}` },
+    ],
   };
 
   const metrics: [string, string][] = [
@@ -114,6 +141,10 @@ export default async function StockPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }}
       />
 
       <div className="mx-auto max-w-5xl">
@@ -173,6 +204,18 @@ export default async function StockPage({
             </div>
           ) : null}
         </header>
+
+        <p className="mt-4 px-1 text-[15px] leading-relaxed text-slate-700">
+          <strong className="text-navy-900">
+            {stock.is_kmi
+              ? `Yes, ${clean} is Shariah compliant.`
+              : `No, ${clean} is not Shariah compliant.`}
+          </strong>{" "}
+          {stock.name} {stock.is_kmi ? "is" : "is not"} a constituent of the KMI All Shares
+          Islamic Index published by the Pakistan Stock Exchange. It last traded at{" "}
+          {money(stock.current_price)} PKR, {stock.change_pct >= 0 ? "up" : "down"}{" "}
+          {percent(Math.abs(stock.change_pct))} on the day, in the {stock.sector_name} sector.
+        </p>
 
         {note ? (
           <section className="card mt-4 p-5 sm:p-6">
@@ -296,6 +339,42 @@ export default async function StockPage({
             scholar for guidance on your own circumstances.
           </p>
         </section>
+
+        {peers.length ? (
+          <section className="card mt-4 p-5">
+            <h2 className="text-base font-bold text-navy-900">
+              Other {stock.sector_name || "PSX"} stocks
+            </h2>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {peers.map((peer) => (
+                <li key={peer.symbol}>
+                  <Link
+                    href={`/stock/${peer.symbol}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm transition hover:border-emerald-300"
+                  >
+                    <span className="font-semibold text-navy-900">{peer.symbol}</span>
+                    <span className={`tabular text-xs ${changeClass(peer.change_pct)}`}>
+                      {percent(peer.change_pct)}
+                    </span>
+                    {peer.is_kmi ? (
+                      <span className="text-xs text-emerald-600">halal</span>
+                    ) : null}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {sectorSlug ? (
+              <Link
+                href={`/picks/${sectorSlug}`}
+                className="mt-4 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+              >
+                See the halal picks for this sector
+              </Link>
+            ) : null}
+          </section>
+        ) : null}
+
+        <GoogleAd slot={AD_SLOT_ARTICLE} className="mt-6" />
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Link

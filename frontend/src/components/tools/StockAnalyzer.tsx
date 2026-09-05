@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { AlertCircle, Loader2, Search, ShieldCheck } from "lucide-react";
 import SymbolInput from "@/components/tools/SymbolInput";
 import { analyzeStock, type StockResult } from "@/lib/clientApi";
+import { trackEvent } from "@/lib/analytics";
 import { changeClass, money, percent } from "@/lib/format";
 import { SectionHeading } from "@/components/ui/Primitives";
 
@@ -33,7 +34,11 @@ export default function StockAnalyzer() {
     setError(null);
     try {
       setResult(await analyzeStock(normalized));
+      // Which symbols people analyse is the single most useful growth signal:
+      // it says which /stock pages to deepen first.
+      trackEvent("stock_analysis", { symbol: normalized });
     } catch (err) {
+      trackEvent("stock_analysis_failed", { symbol: normalized });
       setError(err instanceof Error ? err.message : "Analysis failed.");
       setResult(null);
     } finally {

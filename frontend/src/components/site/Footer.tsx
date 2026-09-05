@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { IMAGES } from "@/lib/images";
+import { SOCIAL_LINKS } from "@/lib/site";
 
 const COLUMNS = [
   {
@@ -8,7 +9,7 @@ const COLUMNS = [
     links: [
       { href: "/#audit", label: "Portfolio audit" },
       { href: "/#analyzer", label: "Stock analyser" },
-      { href: "/#picks", label: "Top halal picks" },
+      { href: "/picks", label: "Top halal picks" },
       { href: "/calculators", label: "Calculators" },
     ],
   },
@@ -52,6 +53,22 @@ export default function Footer() {
               AI research for the Pakistan Stock Exchange. Free, no account needed, and every
               Shariah label comes from the exchange&apos;s own Islamic index.
             </p>
+            {SOCIAL_LINKS.length ? (
+              <ul className="mt-4 flex flex-wrap gap-3">
+                {SOCIAL_LINKS.map((link) => (
+                  <li key={link.label}>
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="me noopener noreferrer"
+                      className="rounded-lg border border-navy-800 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-emerald-500 hover:text-emerald-400"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           {COLUMNS.map((column) => (
