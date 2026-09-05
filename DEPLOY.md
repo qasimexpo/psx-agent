@@ -52,7 +52,7 @@ Preview and Development for each.
 | --- | --- | --- |
 | `DATABASE_URL` | your Neon pooled connection string, database `psx_v2` | Secret. Use the **pooled** endpoint, the one with `-pooler` in the host. |
 | `GROQ_API_KEY` | `gsk_...` | Secret. Powers the portfolio audit and stock analyser. |
-| `GEMINI_API_KEY` | `AIza...` | Secret, optional fallback. See the warning below. |
+| `GEMINI_API_KEY` | `AQ.Ab8RN6...` | Secret. Fallback when Groq is unavailable. |
 | `GROQ_MODEL_FAST` | `openai/gpt-oss-20b` | |
 | `NEXT_PUBLIC_SITE_URL` | `https://www.smartsarmaya.com` | Must match the domain you actually serve, it drives canonical URLs and the sitemap. |
 | `NEXT_PUBLIC_GA_ID` | `G-835C87WVVW` | |
@@ -60,14 +60,20 @@ Preview and Development for each.
 | `NEXT_PUBLIC_ADSENSE_SLOT_TOP` | `5906848623` | |
 | `NEXT_PUBLIC_ADSENSE_SLOT_BOTTOM` | `8341440277` | |
 
-> **The Gemini key currently on file is not an API key.** It begins `AQ.`,
-> which is an OAuth access token, and the API rejects it with
-> `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`. A real key begins `AIza` and comes from
-> [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Until it is
-> replaced there is no fallback if Groq is unavailable.
+> Both providers are verified working. Groq is tried first and Gemini is the
+> fallback. AI Studio now issues keys beginning `AQ.`, which only authenticate
+> in the `x-goog-api-key` header against the `v1beta` endpoint, and that is what
+> the code sends. Do not switch to `?key=` or to the `v1` endpoint: the former
+> is inconsistent for this key format and the latter has no JSON mode.
 
 > Anything prefixed `NEXT_PUBLIC_` is embedded in the browser bundle. Never put
 > a secret behind that prefix.
+
+> Groq retires models without notice. If generation stops, run the pipeline's
+> `health` job and check the logs for `model_not_found`, then update
+> `GROQ_MODEL_QUALITY` and `GROQ_MODEL_FAST` from
+> [console.groq.com/docs/models](https://console.groq.com/docs/models). The
+> code already falls back through several names before giving up.
 
 ---
 
