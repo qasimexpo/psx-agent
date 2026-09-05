@@ -106,10 +106,20 @@ python -m pipeline.run bootstrap
 | `brief --session morning\|closing` | AI market brief | 08:45 and 16:15 PKT |
 | `scorecard` | Marks open picks to market | Daily, 17:30 PKT |
 | `stocks` | AI notes for stock pages | Weekly |
+| `monitor` | Alerts and fails if any content has gone stale | Daily, 18:00 PKT |
 | `health` | Row counts, writes nothing | On demand |
 
 The `technicals` job has a time budget and processes the stalest symbols first, so it always
 finishes inside the workflow timeout and successive runs cover the whole universe.
+
+`monitor` is the one job that writes nothing and is allowed to fail. It compares the newest
+quote, brief, pick, indicator, note and event against the last completed trading session,
+alerts Telegram, and exits non-zero so the Actions run turns red. It exists because a dead
+cron once served stale prices for eight weeks without anyone noticing.
+
+The `brief`, `picks` and `scorecard` jobs also broadcast to Telegram, X, a Facebook Page and
+Instagram. Each channel is skipped with a log line when its credentials are absent, so none of
+this needs configuring to run the pipeline. See `GROWTH.md` for what to set up and when.
 
 ### 3. Site
 

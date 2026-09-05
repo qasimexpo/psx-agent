@@ -229,6 +229,7 @@ python -m pipeline.run brief --session morning|closing
 python -m pipeline.run scorecard     # mark open picks to market
 python -m pipeline.run stocks        # AI notes for stock pages
 python -m pipeline.run bootstrap     # empty database, everything in order
+python -m pipeline.run monitor       # alert and fail if any content is stale
 ```
 
 ### Schedule, all UTC (Pakistan is UTC+5)
@@ -242,6 +243,7 @@ python -m pipeline.run bootstrap     # empty database, everything in order
 | 11:15 weekdays | brief, closing edition |
 | 12:00 weekdays | technicals |
 | 12:30 weekdays | scorecard |
+| 13:00 daily | monitor |
 | 20:00 daily | stocks |
 
 Market hours only, because PSX trades 09:30–15:30 PKT and refreshing prices at
@@ -255,6 +257,20 @@ Market hours only, because PSX trades 09:30–15:30 PKT and refreshing prices at
 2. On a private repository the free allowance is 2,000 minutes a month and this
    schedule uses roughly 1,100. Making the repository public removes the limit
    entirely, and no secrets live in the repository.
+
+### Monitoring
+
+`python -m pipeline.run monitor` runs daily at 13:00 UTC. It writes nothing. It
+compares the newest quote, brief, pick, indicator, note and event against what
+the trading calendar says should exist, posts to Telegram if anything is behind,
+and exits non-zero so the Actions run turns red and GitHub emails about it.
+
+Thresholds are expressed against the last completed trading session rather than
+in flat hours, because PSX does not trade at the weekend and a flat "stale after
+24 hours" rule would alert every Saturday until somebody muted it. That logic is
+covered by `tests/test_monitor_and_social.py`.
+
+This job is the direct answer to the eight weeks of stale data in section 3.
 
 ### If the site looks wrong
 
@@ -299,6 +315,9 @@ competing by hand:
 - One page per sector, `/picks/cement`, targeting "halal cement stocks Pakistan"
 - One page per brief, `/brief/2026-09-05`, roughly 500 new indexable pages a year
 
+- A `/picks` hub above the ten sector pages, so none of them is an orphan
+- Every stock page links to its sector neighbours and to its sector's picks
+
 The sitemap is generated from the database, so new pages submit themselves.
 Currently 350 URLs.
 
@@ -312,11 +331,15 @@ not resubmit repeatedly.
 
 Worth considering, in rough order of value:
 
-- **Monitoring.** Nothing alerts when the pipeline stops. This is the same gap
-  that cost eight weeks of stale data. A simple daily check that the newest
-  `quote_at` is recent would close it.
-- **Telegram broadcast** is written and wired into the brief and picks jobs, but
-  needs `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` to switch on.
+- **Telegram, X, Facebook and Instagram broadcasts** are written and wired into
+  the brief, picks and scorecard jobs, but each needs its credentials before it
+  does anything. Until then every one of them is a logged no-op. See `GROWTH.md`
+  section 5 for what to create and in what order.
+- **Comparison pages** (`/compare/OGDC-vs-PPL`), generated from data already in
+  the database. A page type sarmaaya.pk does not have.
+- **Widening the indexable set.** `listIndexableSymbols` covers only KSE-100 and
+  KMI members, roughly 300 of 496 listed symbols. The rest are searched too, but
+  they need enough unique text first, and thin pages are an AdSense problem.
 - **Urdu.** Deliberately deferred for version one. Roughly doubles the
   reachable audience.
 - Portfolio import from a broker statement PDF, which was done by hand in the
@@ -336,7 +359,12 @@ Worth considering, in rough order of value:
 | `pipeline/llm.py` | Groq with Gemini fallback |
 | `pipeline/prompts.py` | Every system prompt |
 | `pipeline/jobs/` | One module per scheduled job |
+| `pipeline/jobs/monitor.py` | Freshness check; the answer to the stale-data failure |
+| `pipeline/notify.py` | Telegram broadcasts |
+| `pipeline/social.py` | X, Facebook Page and Instagram broadcasts, and every post template |
 | `frontend/src/lib/db.ts` | Every read the site makes |
 | `frontend/src/app/api/` | The two interactive AI endpoints |
+| `frontend/src/app/og/route.tsx` | Share cards. One stable URL, because Instagram fetches images rather than being handed them |
+| `GROWTH.md` | Analytics, SEO, social and revenue |
 | `DEPLOY.md` | Vercel, Cloudflare DNS, GitHub secrets |
 | `README.md` | Architecture and local setup |
