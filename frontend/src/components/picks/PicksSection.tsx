@@ -122,6 +122,16 @@ export default function PicksSection({
   const picks = bundle[horizon] ?? [];
   const active = useMemo(() => HORIZONS.find((h) => h.key === horizon)!, [horizon]);
 
+  /**
+   * Each sector is its own route, and a plain navigation would drop the reader
+   * at the top of the new page. Anchoring to this section keeps the controls
+   * under the cursor so changing sector feels like filtering, not leaving.
+   */
+  const sectorHref = (sector: string): string => {
+    const slug = slugForSector(sector);
+    return slug ? `/picks/${slug}#picks` : "/#picks";
+  };
+
   return (
     <section id="picks" className="scroll-mt-20 bg-white px-4 py-14 sm:px-6">
       <div className="mx-auto max-w-6xl">
@@ -191,10 +201,7 @@ export default function PicksSection({
                 <select
                   id="sector-select"
                   value={activeSector}
-                  onChange={(event) => {
-                    const slug = slugForSector(event.target.value);
-                    router.push(slug ? `/picks/${slug}` : "/");
-                  }}
+                  onChange={(event) => router.push(sectorHref(event.target.value))}
                   className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-navy-900"
                 >
                   {sectors.map((sector) => (
@@ -208,12 +215,10 @@ export default function PicksSection({
               <div className="hidden flex-wrap gap-1.5 sm:flex">
                 {sectors.map((sector) => {
                   const isActive = sector === activeSector;
-                  const slug = slugForSector(sector);
-                  const href = slug ? `/picks/${slug}` : "/";
                   return (
                     <Link
                       key={sector}
-                      href={href}
+                      href={sectorHref(sector)}
                       aria-current={isActive ? "page" : undefined}
                       className={`focus-ring rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                         isActive
