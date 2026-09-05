@@ -64,7 +64,7 @@ export default function GoogleAd({
       attributeFilter: ["data-ad-status"],
     });
     return () => observer.disconnect();
-  }, [hasValidSlot, ADS_CLIENT]);
+  }, [hasValidSlot]);
 
   if (!hasValidSlot || !ADS_CLIENT) {
     return null;

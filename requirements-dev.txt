@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# Test-only dependencies.
+pytest>=8.0.0
+# Parses the frontend's SQL as PostgreSQL so a syntax error is caught in CI
+# rather than as an empty section on the live site.
+sqlglot>=25.0.0

@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -6,9 +7,12 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
+        // The analysis endpoints cost AI quota and return nothing useful to a
+        // crawler, so they are kept out of the crawl budget.
+        disallow: ["/api/"],
       },
     ],
-    sitemap: "https://www.smartsarmaya.com/sitemap.xml",
+    sitemap: `${SITE_URL}/sitemap.xml`,
+    host: SITE_URL,
   };
 }
-

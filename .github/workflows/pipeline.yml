@@ -1,0 +1,110 @@
+name: SmartSarmaya pipeline
+
+# All times are UTC. Pakistan Standard Time is UTC+5, and PSX trades
+# 09:30-15:30 PKT Monday to Friday, so the market refresh only runs during
+# local trading hours. That keeps the workflow inside the free Actions
+# allowance instead of burning minutes overnight.
+#
+#   04:00-11:00 UTC  =  09:00-16:00 PKT   market hours
+#   03:45 UTC        =  08:45 PKT         morning brief, before the open
+#   04:15 UTC        =  09:15 PKT         daily halal picks
+#   11:15 UTC        =  16:15 PKT         closing brief
+#   12:00 UTC        =  17:00 PKT         technicals from end-of-day data
+#
+# GitHub disables scheduled workflows after 60 days without repository
+# activity. If the pipeline goes quiet, push a commit or press Run workflow.
+
+on:
+  schedule:
+    - cron: "0,30 4-11 * * 1-5"   # market: quotes, movers, index
+    - cron: "0 3 * * *"           # events: dividends, meetings, news
+    - cron: "45 3 * * 1-5"        # brief: morning edition
+    - cron: "15 4 * * 1-5"        # picks: Top Halal Picks
+    - cron: "15 11 * * 1-5"       # brief: closing edition
+    - cron: "0 12 * * 1-5"        # technicals: end-of-day indicators
+    - cron: "30 12 * * 1-5"       # scorecard: mark open picks to market
+    - cron: "0 20 * * 0"          # stocks: AI notes for stock pages
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run
+        required: true
+        default: health
+        type: choice
+        options:
+          - health
+          - market
+          - technicals
+          - events
+          - picks
+          - scorecard
+          - brief
+          - stocks
+          - bootstrap
+      session:
+        description: "brief only: which edition"
+        required: false
+        default: closing
+        type: choice
+        options: [morning, closing]
+
+concurrency:
+  group: pipeline-${{ github.event.schedule || inputs.job }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Resolve job from schedule
+        id: resolve
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_JOB: ${{ inputs.job }}
+          MANUAL_SESSION: ${{ inputs.session }}
+        run: |
+          if [ -n "$SCHEDULE" ]; then
+            case "$SCHEDULE" in
+              "0,30 4-11 * * 1-5") JOB=market;     SESSION=closing ;;
+              "0 3 * * *")         JOB=events;     SESSION=closing ;;
+              "45 3 * * 1-5")      JOB=brief;      SESSION=morning ;;
+              "15 4 * * 1-5")      JOB=picks;      SESSION=closing ;;
+              "15 11 * * 1-5")     JOB=brief;      SESSION=closing ;;
+              "0 12 * * 1-5")      JOB=technicals; SESSION=closing ;;
+              "30 12 * * 1-5")     JOB=scorecard;  SESSION=closing ;;
+              "0 20 * * 0")        JOB=stocks;     SESSION=closing ;;
+              *)                   JOB=health;     SESSION=closing ;;
+            esac
+          else
+            JOB="${MANUAL_JOB:-health}"
+            SESSION="${MANUAL_SESSION:-closing}"
+          fi
+          echo "job=$JOB" >> "$GITHUB_OUTPUT"
+          echo "session=$SESSION" >> "$GITHUB_OUTPUT"
+          echo "Running job: $JOB (session: $SESSION)"
+
+      - name: Run ${{ steps.resolve.outputs.job }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://www.smartsarmaya.com' }}
+        run: |
+          python -m pipeline.run "${{ steps.resolve.outputs.job }}" \
+            --session "${{ steps.resolve.outputs.session }}"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::warning::Pipeline job '${{ steps.resolve.outputs.job }}' failed. Data on the site is served from the last successful run."

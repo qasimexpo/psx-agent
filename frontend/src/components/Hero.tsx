@@ -1,53 +1,92 @@
-import Image from "next/image";
-import { Lock, Shield } from "lucide-react";
-import { IMAGES } from "@/lib/images";
+import Link from "next/link";
+import { ArrowRight, Lock, ShieldCheck, Zap } from "lucide-react";
+import type { Scorecard } from "@/lib/db";
 
-export default function Hero() {
+/**
+ * The hero leads with the one thing no other PSX site offers: AI picks screened
+ * against the exchange's own Islamic index, with a published track record.
+ */
+export default function Hero({
+  scorecard,
+  halalCount,
+}: {
+  scorecard: Scorecard;
+  halalCount: number;
+}) {
+  const hasRecord = scorecard.total >= 10;
+
   return (
-    <section className="relative overflow-hidden px-4 py-14 text-white sm:px-6 sm:py-20">
-      <Image
-        src={IMAGES.bannerTop}
-        alt=""
-        fill
-        className="object-cover"
-        priority
+    <section className="panel-dark relative overflow-hidden px-4 py-14 sm:px-6 sm:py-20">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 15% 20%, rgba(16,185,129,0.18), transparent 45%), radial-gradient(circle at 85% 15%, rgba(45,102,255,0.14), transparent 40%)",
+        }}
         aria-hidden
       />
-      <div className="absolute inset-0 bg-[#0B132B]/85" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.15),_transparent_55%)]" />
 
-      <div className="relative mx-auto max-w-6xl text-center">
-        <div className="mb-6 flex justify-center">
-          <Image
-            src={IMAGES.logo}
-            alt="SmartSarmaya"
-            width={72}
-            height={72}
-            className="h-16 w-16 rounded-2xl object-cover shadow-lg shadow-emerald-500/20 sm:h-18 sm:w-18"
-            priority
-          />
-        </div>
+      <div className="relative mx-auto max-w-5xl text-center">
+        <span className="badge badge-on-dark mx-auto mb-5">
+          <ShieldCheck className="h-3 w-3" aria-hidden />
+          Screened against the KMI All Shares Islamic Index
+        </span>
 
-        <h1 className="text-3xl font-bold tracking-wide sm:text-5xl sm:leading-tight">
-          SmartSarmaya - AI PSX Portfolio Auditor
+        <h1 className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-5xl">
+          Halal stock research for the
+          <span className="text-emerald-400"> Pakistan Stock Exchange</span>
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-base text-slate-300 sm:text-lg">
-          Get institutional-grade stock analysis in seconds.
+
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
+          Audit your portfolio, analyse any listed company, and read AI picks whose Shariah status
+          comes from the exchange itself, not from a chatbot&apos;s guess. Free, and no account.
         </p>
 
-        <div className="trust-banner mx-auto mt-8 max-w-3xl rounded-2xl px-5 py-4 text-left backdrop-blur-sm sm:px-6 sm:py-5">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex shrink-0 gap-1">
-              <Shield className="h-5 w-5 text-emerald-400" />
-              <Lock className="h-5 w-5 text-emerald-400" />
-            </div>
-            <p className="text-sm leading-relaxed text-emerald-100 sm:text-base">
-              <strong className="text-white">100% Free &amp; Anonymous.</strong> No Login.
-              No Registration. No Hidden Fees. We DO NOT store your financial data.
-              Your portfolio is analyzed at runtime and instantly deleted.
-            </p>
-          </div>
+        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link
+            href="#audit"
+            className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-base font-semibold text-white transition hover:bg-emerald-600 sm:w-auto"
+          >
+            <Zap className="h-4 w-4" aria-hidden />
+            Audit my portfolio
+          </Link>
+          <Link
+            href="#picks"
+            className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-base font-semibold text-white transition hover:bg-white/10 sm:w-auto"
+          >
+            See today&apos;s halal picks
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
         </div>
+
+        <dl className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+            <dt className="text-[11px] uppercase tracking-wider text-slate-400">Halal stocks</dt>
+            <dd className="tabular mt-0.5 text-xl font-bold text-white">{halalCount || "—"}</dd>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+            <dt className="text-[11px] uppercase tracking-wider text-slate-400">Picks tracked</dt>
+            <dd className="tabular mt-0.5 text-xl font-bold text-white">
+              {scorecard.total || "—"}
+            </dd>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+            <dt className="text-[11px] uppercase tracking-wider text-slate-400">In profit</dt>
+            <dd className="tabular mt-0.5 text-xl font-bold text-emerald-400">
+              {hasRecord ? `${scorecard.hit_rate}%` : "—"}
+            </dd>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+            <dt className="text-[11px] uppercase tracking-wider text-slate-400">Your data kept</dt>
+            <dd className="mt-0.5 text-xl font-bold text-white">None</dd>
+          </div>
+        </dl>
+
+        <p className="mx-auto mt-6 flex max-w-2xl items-center justify-center gap-2 text-sm text-slate-400">
+          <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          No login, no registration, no fees. Your holdings are analysed in the request and never
+          written to disk.
+        </p>
       </div>
     </section>
   );
