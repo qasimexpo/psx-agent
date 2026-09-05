@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Inbox, ShieldCheck } from "lucide-react";
 import type { Pick } from "@/lib/db";
 import { money, parsePickPrice, percent, shortDate } from "@/lib/format";
@@ -116,6 +117,7 @@ export default function PicksSection({
   pickDate: string | null;
   livePrices?: Record<string, number>;
 }) {
+  const router = useRouter();
   const [horizon, setHorizon] = useState<Horizon>("daily");
   const picks = bundle[horizon] ?? [];
   const active = useMemo(() => HORIZONS.find((h) => h.key === horizon)!, [horizon]);
@@ -137,52 +139,96 @@ export default function PicksSection({
           }
         />
 
-        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex w-fit shrink-0 gap-1 rounded-xl bg-slate-100 p-1">
-            {HORIZONS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setHorizon(item.key)}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition focus-ring ${
-                  horizon === item.key
-                    ? "bg-white text-navy-900 shadow-sm"
-                    : "text-slate-600 hover:text-navy-900"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+        <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200">
+          {/* Horizon is the primary control, so it gets its own row with the
+              context for the selected one sitting directly beneath it. */}
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              role="tablist"
+              aria-label="Investment horizon"
+              className="flex w-full gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200 sm:w-auto"
+            >
+              {HORIZONS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={horizon === item.key}
+                  onClick={() => setHorizon(item.key)}
+                  className={`focus-ring flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition sm:flex-none ${
+                    horizon === item.key
+                      ? "bg-navy-900 text-white"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-navy-900"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="tabular text-xs text-slate-500 sm:text-right">
+              <span className="font-semibold text-navy-900">
+                {picks.length} {picks.length === 1 ? "pick" : "picks"}
+              </span>
+              {pickDate ? <> · generated {shortDate(pickDate)}</> : null}
+              <span className="block sm:mt-0.5">{active.blurb}</span>
+            </p>
           </div>
 
-          <div className="table-scroll -mx-1 min-w-0 px-1">
-            <div className="flex gap-1.5">
-              {sectors.map((sector) => {
-                const isActive = sector === activeSector;
-                const slug = slugForSector(sector);
-                const href = slug ? `/picks/${slug}` : "/";
-                return (
-                  <Link
-                    key={sector}
-                    href={href}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                      isActive
-                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                        : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-navy-900"
-                    }`}
-                  >
-                    {sector}
-                  </Link>
-                );
-              })}
+          {/* Sectors wrap onto as many lines as they need rather than sitting in
+              a scroller, which is what put a native scrollbar under the row. */}
+          <div className="px-4 py-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+              <span className="shrink-0 pt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Sector
+              </span>
+
+              {/* Phones get a real select; a row of chips is awkward to tap. */}
+              <div className="sm:hidden">
+                <label htmlFor="sector-select" className="sr-only">
+                  Choose a sector
+                </label>
+                <select
+                  id="sector-select"
+                  value={activeSector}
+                  onChange={(event) => {
+                    const slug = slugForSector(event.target.value);
+                    router.push(slug ? `/picks/${slug}` : "/");
+                  }}
+                  className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-navy-900"
+                >
+                  {sectors.map((sector) => (
+                    <option key={sector} value={sector}>
+                      {sector === "All" ? "All sectors" : sector}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="hidden flex-wrap gap-1.5 sm:flex">
+                {sectors.map((sector) => {
+                  const isActive = sector === activeSector;
+                  const slug = slugForSector(sector);
+                  const href = slug ? `/picks/${slug}` : "/";
+                  return (
+                    <Link
+                      key={sector}
+                      href={href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`focus-ring rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        isActive
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-navy-900"
+                      }`}
+                    >
+                      {sector === "All" ? "All sectors" : sector}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
-
-        <p className="mb-4 text-sm text-slate-500">
-          {active.blurb}
-          {pickDate ? ` · Generated ${shortDate(pickDate)}` : null}
-        </p>
 
         {picks.length ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
