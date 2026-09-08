@@ -18,6 +18,7 @@ import {
   getMarketStats,
   getMovers,
   getNews,
+  getQuotesFor,
   getScorecard,
   getSectorStats,
   getTickerQuotes,
@@ -99,6 +100,11 @@ export default async function Page() {
 
   const allPicks: Pick[] = [...bundle.daily, ...bundle.monthly, ...bundle.yearly];
 
+  // Each orbit chip shows how its pick has moved today, and a pick is usually
+  // outside the thirty rows the ticker fetches, so quote those symbols directly
+  // rather than leaving the chips bare.
+  const pickQuotes = await getQuotesFor(allPicks.slice(0, 12).map((pick) => pick.symbol));
+
   return (
     <>
       <Hero
@@ -106,7 +112,7 @@ export default async function Page() {
         halalCount={stats.halal}
         index={index}
         picks={allPicks}
-        quotes={quotes}
+        quotes={[...pickQuotes, ...quotes]}
       />
       <Ticker quotes={quotes} />
 
