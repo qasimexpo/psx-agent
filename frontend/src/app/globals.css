@@ -213,3 +213,562 @@ body {
     background: #ffffff;
   }
 }
+
+/* ==========================================================================
+   Hero: the orbit around the KSE-100.
+
+   Each ring is a circle laid into a plane tilted away from the camera, so it
+   projects as an ellipse. The chips riding it would be tilted with it, which
+   is why every rotation is undone again further down the tree:
+
+     .orbit-plane       rotateX(tilt)
+     .orbit-spin        rotateZ(0 -> 360)    animated
+     .orbit-node        rotateZ(a) translateY(-r)
+     .orbit-node-level  rotateZ(-a)
+     .orbit-node-unspin rotateZ(0 -> -360)   animated, same duration
+     .orbit-node-face   rotateX(-tilt)
+
+   Those four undo steps cancel every rotation and leave a pure 3D
+   translation, so a chip rides the ellipse, never tips, faces the reader, and
+   still carries a real z that perspective scales by depth.
+
+   The pointer effect is two custom properties, --px and --py in the range
+   -0.5 to 0.5, written onto .hero-stage by ParallaxStage. Everything that
+   moves under the pointer reads them here.
+   ========================================================================== */
+
+.hero-stage {
+  --px: 0;
+  --py: 0;
+  --orbit-tilt: 70deg;
+  position: relative;
+  overflow: hidden;
+  padding: 2.5rem 1rem;
+  color: #ffffff;
+  background:
+    radial-gradient(120% 90% at 76% 46%, rgba(16, 185, 129, 0.17), transparent 58%),
+    radial-gradient(90% 70% at 10% 10%, rgba(30, 48, 96, 0.5), transparent 60%),
+    linear-gradient(160deg, #070e20 0%, #08132a 52%, #070e20 100%);
+}
+
+@media (min-width: 640px) {
+  .hero-stage {
+    padding: 3rem 1.5rem;
+  }
+}
+
+@media (min-width: 880px) {
+  .hero-stage {
+    padding: 3.5rem 2.5rem;
+  }
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  min-height: 380px;
+}
+
+@media (min-width: 880px) {
+  .hero-inner {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    min-height: 470px;
+  }
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 3;
+  transform: translateY(calc(var(--py) * -8px));
+  transition: transform 480ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* -------------------------------------------------------------- starfield  */
+
+/* Three depths, each drifting a different distance under the pointer. The
+   negative inset keeps the edges covered while a layer is displaced. */
+.hero-stars {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+  transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
+}
+
+.hero-stars-near {
+  transform: translate3d(calc(var(--px) * -22px), calc(var(--py) * -22px), 0);
+  background-image:
+    radial-gradient(1.6px 1.6px at 8% 18%, rgba(255,255,255,0.95), transparent 62%),
+    radial-gradient(1.6px 1.6px at 22% 63%, rgba(255,255,255,0.8), transparent 62%),
+    radial-gradient(1.6px 1.6px at 34% 11%, rgba(255,255,255,0.85), transparent 62%),
+    radial-gradient(1.6px 1.6px at 46% 80%, rgba(255,255,255,0.75), transparent 62%),
+    radial-gradient(1.6px 1.6px at 61% 27%, rgba(255,255,255,0.9), transparent 62%),
+    radial-gradient(1.6px 1.6px at 74% 67%, rgba(255,255,255,0.75), transparent 62%),
+    radial-gradient(1.6px 1.6px at 87% 19%, rgba(255,255,255,0.85), transparent 62%),
+    radial-gradient(1.6px 1.6px at 93% 55%, rgba(255,255,255,0.7), transparent 62%),
+    radial-gradient(1.6px 1.6px at 16% 89%, rgba(255,255,255,0.75), transparent 62%),
+    radial-gradient(1.6px 1.6px at 68% 91%, rgba(255,255,255,0.65), transparent 62%),
+    radial-gradient(1.6px 1.6px at 3% 44%, rgba(255,255,255,0.8), transparent 62%),
+    radial-gradient(1.6px 1.6px at 29% 37%, rgba(255,255,255,0.7), transparent 62%),
+    radial-gradient(1.6px 1.6px at 41% 6%, rgba(255,255,255,0.85), transparent 62%),
+    radial-gradient(1.6px 1.6px at 55% 58%, rgba(255,255,255,0.7), transparent 62%),
+    radial-gradient(1.6px 1.6px at 66% 84%, rgba(255,255,255,0.75), transparent 62%),
+    radial-gradient(1.6px 1.6px at 79% 8%, rgba(255,255,255,0.8), transparent 62%),
+    radial-gradient(1.6px 1.6px at 91% 73%, rgba(255,255,255,0.7), transparent 62%),
+    radial-gradient(1.6px 1.6px at 12% 72%, rgba(255,255,255,0.75), transparent 62%),
+    radial-gradient(1.6px 1.6px at 37% 95%, rgba(255,255,255,0.65), transparent 62%),
+    radial-gradient(1.6px 1.6px at 50% 33%, rgba(255,255,255,0.8), transparent 62%),
+    radial-gradient(1.6px 1.6px at 84% 41%, rgba(255,255,255,0.75), transparent 62%),
+    radial-gradient(1.6px 1.6px at 97% 27%, rgba(255,255,255,0.7), transparent 62%),
+    radial-gradient(1.6px 1.6px at 25% 5%, rgba(255,255,255,0.8), transparent 62%),
+    radial-gradient(1.6px 1.6px at 59% 14%, rgba(255,255,255,0.7), transparent 62%),
+    radial-gradient(2px 2px at 19% 33%, rgba(110,231,183,0.7), transparent 62%),
+    radial-gradient(2px 2px at 41% 71%, rgba(110,231,183,0.6), transparent 62%),
+    radial-gradient(2px 2px at 63% 58%, rgba(110,231,183,0.55), transparent 62%),
+    radial-gradient(2px 2px at 82% 47%, rgba(110,231,183,0.65), transparent 62%),
+    radial-gradient(2px 2px at 25% 77%, rgba(110,231,183,0.55), transparent 62%),
+    radial-gradient(2px 2px at 76% 83%, rgba(110,231,183,0.6), transparent 62%);
+}
+
+.hero-stars-mid {
+  transform: translate3d(calc(var(--px) * -12px), calc(var(--py) * -12px), 0);
+  background-image:
+    radial-gradient(1.15px 1.15px at 12% 41%, rgba(226,232,240,0.7), transparent 62%),
+    radial-gradient(1.15px 1.15px at 27% 25%, rgba(226,232,240,0.62), transparent 62%),
+    radial-gradient(1.15px 1.15px at 39% 55%, rgba(226,232,240,0.58), transparent 62%),
+    radial-gradient(1.15px 1.15px at 52% 14%, rgba(226,232,240,0.65), transparent 62%),
+    radial-gradient(1.15px 1.15px at 58% 86%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 66% 43%, rgba(226,232,240,0.5), transparent 62%),
+    radial-gradient(1.15px 1.15px at 79% 33%, rgba(226,232,240,0.62), transparent 62%),
+    radial-gradient(1.15px 1.15px at 84% 76%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 95% 35%, rgba(226,232,240,0.5), transparent 62%),
+    radial-gradient(1.15px 1.15px at 4% 66%, rgba(226,232,240,0.58), transparent 62%),
+    radial-gradient(1.15px 1.15px at 30% 93%, rgba(226,232,240,0.5), transparent 62%),
+    radial-gradient(1.15px 1.15px at 44% 34%, rgba(226,232,240,0.45), transparent 62%),
+    radial-gradient(1.15px 1.15px at 71% 12%, rgba(226,232,240,0.58), transparent 62%),
+    radial-gradient(1.15px 1.15px at 89% 89%, rgba(226,232,240,0.5), transparent 62%),
+    radial-gradient(1.15px 1.15px at 6% 9%, rgba(226,232,240,0.6), transparent 62%),
+    radial-gradient(1.15px 1.15px at 19% 55%, rgba(226,232,240,0.52), transparent 62%),
+    radial-gradient(1.15px 1.15px at 33% 78%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 48% 47%, rgba(226,232,240,0.48), transparent 62%),
+    radial-gradient(1.15px 1.15px at 63% 71%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 77% 52%, rgba(226,232,240,0.5), transparent 62%),
+    radial-gradient(1.15px 1.15px at 88% 60%, rgba(226,232,240,0.52), transparent 62%),
+    radial-gradient(1.15px 1.15px at 99% 84%, rgba(226,232,240,0.45), transparent 62%),
+    radial-gradient(1.15px 1.15px at 2% 27%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 24% 46%, rgba(226,232,240,0.48), transparent 62%),
+    radial-gradient(1.15px 1.15px at 43% 22%, rgba(226,232,240,0.58), transparent 62%),
+    radial-gradient(1.15px 1.15px at 56% 96%, rgba(226,232,240,0.45), transparent 62%),
+    radial-gradient(1.15px 1.15px at 70% 30%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 82% 92%, rgba(226,232,240,0.48), transparent 62%),
+    radial-gradient(1.15px 1.15px at 94% 12%, rgba(226,232,240,0.55), transparent 62%),
+    radial-gradient(1.15px 1.15px at 15% 15%, rgba(226,232,240,0.5), transparent 62%);
+}
+
+.hero-stars-far {
+  transform: translate3d(calc(var(--px) * -5px), calc(var(--py) * -5px), 0);
+  background-image:
+    radial-gradient(0.9px 0.9px at 10% 30%, rgba(148,163,184,0.5), transparent 62%),
+    radial-gradient(0.9px 0.9px at 20% 80%, rgba(148,163,184,0.45), transparent 62%),
+    radial-gradient(0.9px 0.9px at 31% 50%, rgba(148,163,184,0.42), transparent 62%),
+    radial-gradient(0.9px 0.9px at 42% 68%, rgba(148,163,184,0.48), transparent 62%),
+    radial-gradient(0.9px 0.9px at 53% 25%, rgba(148,163,184,0.44), transparent 62%),
+    radial-gradient(0.9px 0.9px at 64% 55%, rgba(148,163,184,0.4), transparent 62%),
+    radial-gradient(0.9px 0.9px at 75% 78%, rgba(148,163,184,0.46), transparent 62%),
+    radial-gradient(0.9px 0.9px at 86% 30%, rgba(148,163,184,0.42), transparent 62%),
+    radial-gradient(0.9px 0.9px at 96% 66%, rgba(148,163,184,0.4), transparent 62%),
+    radial-gradient(0.9px 0.9px at 7% 55%, rgba(148,163,184,0.46), transparent 62%),
+    radial-gradient(0.9px 0.9px at 17% 38%, rgba(148,163,184,0.42), transparent 62%),
+    radial-gradient(0.9px 0.9px at 28% 62%, rgba(148,163,184,0.44), transparent 62%),
+    radial-gradient(0.9px 0.9px at 36% 88%, rgba(148,163,184,0.4), transparent 62%),
+    radial-gradient(0.9px 0.9px at 47% 12%, rgba(148,163,184,0.48), transparent 62%),
+    radial-gradient(0.9px 0.9px at 57% 42%, rgba(148,163,184,0.42), transparent 62%),
+    radial-gradient(0.9px 0.9px at 68% 20%, rgba(148,163,184,0.46), transparent 62%),
+    radial-gradient(0.9px 0.9px at 73% 95%, rgba(148,163,184,0.4), transparent 62%),
+    radial-gradient(0.9px 0.9px at 81% 65%, rgba(148,163,184,0.44), transparent 62%),
+    radial-gradient(0.9px 0.9px at 90% 48%, rgba(148,163,184,0.42), transparent 62%),
+    radial-gradient(0.9px 0.9px at 99% 45%, rgba(148,163,184,0.38), transparent 62%),
+    radial-gradient(0.9px 0.9px at 5% 88%, rgba(148,163,184,0.44), transparent 62%),
+    radial-gradient(0.9px 0.9px at 26% 15%, rgba(148,163,184,0.46), transparent 62%),
+    radial-gradient(0.9px 0.9px at 39% 40%, rgba(148,163,184,0.4), transparent 62%),
+    radial-gradient(0.9px 0.9px at 61% 63%, rgba(148,163,184,0.42), transparent 62%),
+    radial-gradient(0.9px 0.9px at 85% 5%, rgba(148,163,184,0.46), transparent 62%),
+    radial-gradient(0.9px 0.9px at 92% 96%, rgba(148,163,184,0.4), transparent 62%);
+}
+
+.hero-twinkle {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #ffffff;
+  opacity: 0.25;
+  pointer-events: none;
+  animation: hero-twinkle var(--twinkle-duration, 4s) ease-in-out infinite alternate;
+  animation-delay: var(--twinkle-delay, 0s);
+}
+
+@keyframes hero-twinkle {
+  from {
+    opacity: 0.15;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+}
+
+/* ------------------------------------------------------------ orbit engine */
+
+/* The orbit column is a desktop luxury: below 880px the copy takes the full
+   width and none of this renders at all. */
+.hero-scene {
+  /* The system scales with its column, so the outer ring never runs past the
+     edge on a narrow desktop. */
+  --orbit-scale: 0.78;
+  --core-size: calc(150px * var(--orbit-scale));
+  display: none;
+}
+
+@media (min-width: 880px) {
+  .hero-scene {
+    display: block;
+    position: relative;
+    height: 470px;
+    perspective: 1000px;
+    transform-style: preserve-3d;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-scene {
+    --orbit-scale: 0.88;
+  }
+}
+
+@media (min-width: 1280px) {
+  .hero-scene {
+    --orbit-scale: 1;
+  }
+}
+
+.hero-system {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform:
+    translateY(calc(var(--py) * -26px))
+    translateX(calc(var(--px) * -14px))
+    rotateX(calc(var(--py) * 9deg))
+    rotateY(calc(var(--px) * 12deg));
+  transition: transform 480ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
+}
+
+.orbit {
+  --radius: calc(var(--r) * var(--orbit-scale, 1));
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+}
+
+.orbit-plane {
+  position: absolute;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--orbit-tilt));
+}
+
+.orbit-path {
+  position: absolute;
+  width: calc(var(--radius) * 2);
+  height: calc(var(--radius) * 2);
+  margin: calc(var(--radius) * -1) 0 0 calc(var(--radius) * -1);
+  border-radius: 50%;
+  border: 1px solid;
+  /* Under the tilt the top border is the far side and the bottom the near. */
+  border-top-color: rgba(52, 211, 153, 0.1);
+  border-right-color: rgba(52, 211, 153, 0.2);
+  border-bottom-color: rgba(52, 211, 153, 0.38);
+  border-left-color: rgba(52, 211, 153, 0.2);
+}
+
+.orbit-spin {
+  position: absolute;
+  transform-style: preserve-3d;
+  animation: orbit-turn var(--dur) linear infinite;
+}
+
+.orbit-node {
+  position: absolute;
+  transform-style: preserve-3d;
+  transform: rotateZ(var(--a)) translateY(calc(var(--radius) * -1));
+}
+
+.orbit-node-level {
+  position: absolute;
+  transform-style: preserve-3d;
+  transform: rotateZ(calc(-1 * var(--a)));
+}
+
+.orbit-node-unspin {
+  position: absolute;
+  transform-style: preserve-3d;
+  animation: orbit-unturn var(--dur) linear infinite;
+}
+
+.orbit-node-face {
+  position: absolute;
+  transform-style: preserve-3d;
+  transform: rotateX(calc(-1 * var(--orbit-tilt)));
+}
+
+/* A counter-turning ring has to flip both halves of the pair together, or the
+   cancellation stops working and the chips tumble. */
+.orbit-reverse .orbit-spin,
+.orbit-reverse .orbit-node-unspin {
+  animation-direction: reverse;
+}
+
+/* Hovering the system holds it still so a pick can actually be clicked, the
+   same courtesy the ticker already extends. */
+.hero-scene:hover .orbit-spin,
+.hero-scene:hover .orbit-node-unspin,
+.hero-scene:focus-within .orbit-spin,
+.hero-scene:focus-within .orbit-node-unspin {
+  animation-play-state: paused;
+}
+
+@keyframes orbit-turn {
+  from {
+    transform: rotateZ(0deg);
+  }
+  to {
+    transform: rotateZ(360deg);
+  }
+}
+
+@keyframes orbit-unturn {
+  from {
+    transform: rotateZ(0deg);
+  }
+  to {
+    transform: rotateZ(-360deg);
+  }
+}
+
+.orbit-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  border-radius: 0.5625rem;
+  background: rgba(9, 17, 38, 0.92);
+  border: 1px solid rgba(52, 211, 153, 0.32);
+  box-shadow: 0 0 0 4px rgba(7, 14, 32, 0.35), 0 8px 20px -8px rgba(0, 0, 0, 0.9);
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-emerald-300);
+  white-space: nowrap;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+/* Hovering a pick lifts it clear of its orbit. */
+.orbit-chip:hover,
+.orbit-chip:focus-visible {
+  transform: translate(-50%, -50%) translateY(-9px) scale(1.14);
+  border-color: var(--color-emerald-400);
+  box-shadow:
+    0 0 0 4px rgba(7, 14, 32, 0.35),
+    0 0 22px rgba(16, 185, 129, 0.55),
+    0 14px 26px -10px rgba(0, 0, 0, 0.95);
+}
+
+.orbit-chip-change {
+  font-weight: 500;
+  font-size: 0.625rem;
+}
+
+.orbit-chip-up {
+  color: var(--color-emerald-400);
+}
+
+.orbit-chip-down {
+  color: #fb7185;
+}
+
+.orbit-moon {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--color-emerald-400);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9);
+}
+
+.orbit-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--core-size);
+  height: var(--core-size);
+  margin: calc(var(--core-size) / -2) 0 0 calc(var(--core-size) / -2);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.3), rgba(7, 14, 32, 0.94) 68%);
+  box-shadow:
+    0 0 0 1px rgba(7, 14, 32, 0.9),
+    0 0 70px rgba(16, 185, 129, 0.3),
+    inset 0 0 34px rgba(16, 185, 129, 0.18);
+}
+
+.orbit-core-name {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-emerald-300);
+}
+
+.orbit-core-value {
+  margin-top: 0.1875rem;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.orbit-core-change {
+  margin-top: 0.0625rem;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 0.75rem;
+}
+
+.orbit-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--core-size);
+  height: var(--core-size);
+  margin: calc(var(--core-size) / -2) 0 0 calc(var(--core-size) / -2);
+  border-radius: 50%;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  pointer-events: none;
+  animation: orbit-pulse 4s ease-out infinite;
+}
+
+.orbit-pulse-late {
+  animation-delay: 2s;
+}
+
+@keyframes orbit-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------- sector rail */
+
+.hero-rail {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: rgba(7, 14, 32, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.hero-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.hero-rail-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+  transition: transform 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.hero-rail-link:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.hero-rail-link-active {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(52, 211, 153, 0.34);
+  color: var(--color-emerald-300);
+}
+
+.hero-rail-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-emerald-500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Stopping the turn leaves every chip where it sits: the placement is static
+     transforms, only the rotation was ever animated. */
+  .orbit-spin,
+  .orbit-node-unspin,
+  .hero-twinkle,
+  .orbit-pulse {
+    animation: none !important;
+  }
+
+  .orbit-pulse {
+    opacity: 0.18;
+  }
+
+  .hero-stars,
+  .hero-system,
+  .hero-copy {
+    transition: none;
+    transform: none !important;
+  }
+
+  .hero-rail-link:hover {
+    transform: none;
+  }
+}

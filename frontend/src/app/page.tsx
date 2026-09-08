@@ -101,7 +101,13 @@ export default async function Page() {
 
   return (
     <>
-      <Hero scorecard={scorecard} halalCount={stats.halal} />
+      <Hero
+        scorecard={scorecard}
+        halalCount={stats.halal}
+        index={index}
+        picks={allPicks}
+        quotes={quotes}
+      />
       <Ticker quotes={quotes} />
 
       <section className="px-4 pt-8 sm:px-6">
