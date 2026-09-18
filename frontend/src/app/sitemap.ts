@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { getMarketStats, listBriefs, listIndexableSymbols } from "@/lib/db";
+import { getMarketStats, listBriefs, listSitemapSymbols } from "@/lib/db";
+import { briefPath } from "@/lib/briefs";
 import { PICK_SECTORS } from "@/lib/sectors";
 import { SITE_URL } from "@/lib/site";
 
@@ -29,8 +30,8 @@ const latest = (...dates: (Date | undefined)[]): Date | undefined =>
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [symbols, briefs, market] = await Promise.all([
-    listIndexableSymbols(400),
-    listBriefs(120),
+    listSitemapSymbols(),
+    listBriefs(240),
     getMarketStats(),
   ]);
 
@@ -68,18 +69,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: row.is_kmi ? 0.7 : 0.6,
   }));
 
-  const seen = new Set<string>();
-  const briefRoutes: MetadataRoute.Sitemap = [];
-  for (const brief of briefs) {
-    if (seen.has(brief.brief_date)) continue;
-    seen.add(brief.brief_date);
-    briefRoutes.push({
-      url: `${SITE_URL}/brief/${brief.brief_date}`,
-      lastModified: asDate(brief.updated_at) ?? new Date(brief.brief_date),
-      changeFrequency: "never",
-      priority: 0.6,
-    });
-  }
+  // Each edition has its own URL; a date with only a morning brief lists
+  // just that one, which is also where /brief/<date> canonicalises to.
+  const briefRoutes: MetadataRoute.Sitemap = briefs.map((brief) => ({
+    url: `${SITE_URL}${briefPath(brief)}`,
+    lastModified: asDate(brief.updated_at) ?? new Date(brief.brief_date),
+    changeFrequency: "never",
+    priority: brief.session === "morning" ? 0.5 : 0.6,
+  }));
 
   return [...staticRoutes, ...sectorRoutes, ...stockRoutes, ...briefRoutes];
 }

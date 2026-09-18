@@ -124,7 +124,7 @@ export default async function PicksHubPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-4 text-xs text-slate-400">
+                  <p className="mt-4 text-xs text-slate-500">
                     Ranked every trading morning.
                   </p>
                 )}

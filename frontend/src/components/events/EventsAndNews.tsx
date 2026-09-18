@@ -112,7 +112,7 @@ export function EventsSection({
                         <td className="tabular whitespace-nowrap px-4 py-2.5 text-slate-700">
                           {shortDate(row.event_date)}
                           {row.event_time ? (
-                            <span className="block text-xs text-slate-400">{row.event_time}</span>
+                            <span className="block text-xs text-slate-500">{row.event_time}</span>
                           ) : null}
                         </td>
                       </tr>
@@ -170,7 +170,7 @@ export function NewsSection({ pakistan, global }: { pakistan: NewsRow[]; global:
                           <span className="text-sm font-semibold leading-snug text-navy-900 group-hover:text-emerald-700">
                             {item.title}
                           </span>
-                          <span className="mt-1 block text-xs uppercase tracking-wide text-slate-400">
+                          <span className="mt-1 block text-xs uppercase tracking-wide text-slate-500">
                             {item.source}
                           </span>
                         </span>

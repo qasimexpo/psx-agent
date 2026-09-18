@@ -3,6 +3,7 @@ import { ArrowRight, Newspaper } from "lucide-react";
 import type { BriefRow } from "@/lib/db";
 import { longDate, percent, money, changeClass } from "@/lib/format";
 import { SectionHeading, SymbolLink } from "@/components/ui/Primitives";
+import { briefPath } from "@/lib/briefs";
 
 const SESSION_LABEL: Record<string, string> = {
   morning: "Morning brief",
@@ -59,13 +60,13 @@ export default function BriefCard({ brief }: { brief: BriefRow | null }) {
           <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <h3 className="text-xl font-bold leading-snug text-navy-900">
-                <Link href={`/brief/${brief.brief_date}`} className="hover:text-emerald-700">
+                <Link href={briefPath(brief)} className="hover:text-emerald-700">
                   {brief.headline}
                 </Link>
               </h3>
               <p className="mt-2.5 leading-relaxed text-slate-700">{brief.summary}</p>
               <Link
-                href={`/brief/${brief.brief_date}`}
+                href={briefPath(brief)}
                 className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
               >
                 Read the full brief

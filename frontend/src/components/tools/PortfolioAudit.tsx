@@ -270,7 +270,7 @@ function AuditResult({ result }: { result: PortfolioResult }) {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Shariah compliant
           </p>
-          <p className="tabular mt-1 text-xl font-bold text-emerald-600">
+          <p className="tabular mt-1 text-xl font-bold text-emerald-700">
             {result.totals.halal_pct}%
           </p>
           <p className="text-xs text-slate-500">of portfolio value</p>

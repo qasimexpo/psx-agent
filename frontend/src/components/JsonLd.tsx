@@ -1,5 +1,6 @@
 import {
   CONTACT_EMAIL,
+  EDITOR,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_URL,
@@ -19,9 +20,10 @@ const structuredData = {
       "@id": `${SITE_URL}/#organization`,
       name: SITE_NAME,
       url: SITE_URL,
-      logo: `${SITE_URL}/images/logo.jpg`,
+      logo: `${SITE_URL}/images/logo-512.png`,
       description: SITE_DESCRIPTION,
       areaServed: { "@type": "Country", name: "Pakistan" },
+      founder: { "@id": EDITOR.id },
       contactPoint: {
         "@type": "ContactPoint",
         email: CONTACT_EMAIL,
@@ -34,6 +36,15 @@ const structuredData = {
         : {}),
     },
     {
+      "@type": "Person",
+      "@id": EDITOR.id,
+      name: EDITOR.name,
+      jobTitle: EDITOR.jobTitle,
+      description: EDITOR.bio,
+      url: EDITOR.url,
+      worksFor: { "@id": `${SITE_URL}/#organization` },
+    },
+    {
       "@type": "WebSite",
       "@id": `${SITE_URL}/#website`,
       name: SITE_NAME,
@@ -41,6 +52,14 @@ const structuredData = {
       description: SITE_DESCRIPTION,
       publisher: { "@id": `${SITE_URL}/#organization` },
       inLanguage: "en",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: `${SITE_URL}/stocks?q={search_term_string}`,
+        },
+        "query-input": "required name=search_term_string",
+      },
     },
   ],
 };

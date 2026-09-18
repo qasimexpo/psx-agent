@@ -5,7 +5,7 @@ import { compact, money, percent } from "@/lib/format";
 import { SectionHeading } from "@/components/ui/Primitives";
 
 const COLUMNS = [
-  { kind: "gainers", label: "Top gainers", icon: TrendingUp, tone: "text-emerald-600" },
+  { kind: "gainers", label: "Top gainers", icon: TrendingUp, tone: "text-emerald-700" },
   { kind: "losers", label: "Top losers", icon: TrendingDown, tone: "text-rose-600" },
   { kind: "most_active", label: "Most active", icon: Flame, tone: "text-amber-600" },
 ] as const;
@@ -32,7 +32,7 @@ function MoverRow({ mover }: { mover: Mover }) {
       </div>
       <div className="shrink-0 text-right">
         <p className="tabular text-sm font-semibold text-navy-900">{money(mover.price)}</p>
-        <p className={`tabular text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>
+        <p className={`tabular text-xs font-semibold ${up ? "text-emerald-700" : "text-rose-600"}`}>
           {percent(mover.change_pct)}
         </p>
       </div>
@@ -108,7 +108,7 @@ export default function Movers({
                       </p>
                       <span
                         className={`tabular shrink-0 text-xs font-semibold ${
-                          positive ? "text-emerald-600" : "text-rose-600"
+                          positive ? "text-emerald-700" : "text-rose-600"
                         }`}
                       >
                         {sector.advance}/{sector.decline}

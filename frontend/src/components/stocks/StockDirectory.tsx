@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { changeClass, money, percent } from "@/lib/format";
@@ -14,13 +14,23 @@ export type DirectoryRow = {
   change_pct: number;
 };
 
+const subscribeNever = () => () => {};
+const readQueryParam = () => new URLSearchParams(window.location.search).get("q") ?? "";
+const readNothing = () => "";
+
 /**
  * Filtering happens in the browser over data the server already rendered, so
  * the page stays static and the filters cost nothing.
  */
 export default function StockDirectory({ rows }: { rows: DirectoryRow[] }) {
   const [halalOnly, setHalalOnly] = useState(false);
-  const [term, setTerm] = useState("");
+  // /stocks?q=PPL is the site search target advertised in the WebSite
+  // schema. The URL seeds the box until the reader types; reading it this
+  // way keeps the page static and hydrates without a mismatch, because the
+  // server snapshot is always empty.
+  const urlTerm = useSyncExternalStore(subscribeNever, readQueryParam, readNothing);
+  const [typed, setTyped] = useState<string | null>(null);
+  const term = typed ?? urlTerm;
 
   const filtered = useMemo(() => {
     const needle = term.trim().toUpperCase();
@@ -51,7 +61,7 @@ export default function StockDirectory({ rows }: { rows: DirectoryRow[] }) {
           <input
             type="search"
             value={term}
-            onChange={(event) => setTerm(event.target.value)}
+            onChange={(event) => setTyped(event.target.value)}
             placeholder="Search symbol or company"
             aria-label="Search stocks"
             className="focus-ring w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm"
@@ -80,7 +90,7 @@ export default function StockDirectory({ rows }: { rows: DirectoryRow[] }) {
             <section key={sector}>
               <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-slate-500">
                 {sector}
-                <span className="ml-2 font-normal normal-case text-slate-400">{items.length}</span>
+                <span className="ml-2 font-normal normal-case text-slate-500">{items.length}</span>
               </h2>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((row) => (

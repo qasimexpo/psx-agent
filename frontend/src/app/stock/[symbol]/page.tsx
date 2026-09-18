@@ -59,7 +59,7 @@ export async function generateMetadata({
     title: { absolute: `${label} share price & halal status` },
     // Kept under 155 characters so the halal verdict and price both survive
     // the snippet. "Latest" rather than "live": quotes are end-of-day.
-    description: `${label} is ${halal} on the PSX. Latest price ${money(stock.current_price)} PKR (${percent(stock.change_pct)}). RSI, moving averages, 52-week range and KMI Islamic index status.`,
+    description: `${label} is ${halal} on the PSX. Latest price ${money(stock.current_price)} PKR (${percent(stock.change_pct)}). Technicals, 52-week range and KMI index status.`,
     alternates: { canonical: `/stock/${clean}` },
     openGraph: {
       title: `${label} share price and analysis`,
@@ -108,7 +108,7 @@ export default async function StockPage({
   const [note, events, peers, parent] = await Promise.all([
     getStockNote(clean),
     getEventsFor([clean]),
-    listSectorPeers(clean, stock.sector_code),
+    listSectorPeers(clean, stock.sector_code, 8),
     parentTicker ? getStock(parentTicker) : null,
   ]);
   const position = rangePosition(stock.current_price, stock.low_52w, stock.high_52w);
@@ -304,14 +304,21 @@ export default async function StockPage({
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <section className="card p-5">
             <h2 className="mb-3 text-sm font-bold text-navy-900">Today</h2>
-            <dl className="space-y-2">
-              {metrics.map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-3">
-                  <dt className="text-sm text-slate-500">{label}</dt>
-                  <dd className="tabular text-sm font-semibold text-navy-900">{value}</dd>
-                </div>
-              ))}
-            </dl>
+            <table className="w-full">
+              <caption className="sr-only">{clean} trading data for the latest session</caption>
+              <tbody>
+                {metrics.map(([label, value]) => (
+                  <tr key={label} className="border-b border-slate-100 last:border-0">
+                    <th scope="row" className="py-1 pr-3 text-left text-sm font-normal text-slate-500">
+                      {label}
+                    </th>
+                    <td className="tabular py-1 text-right text-sm font-semibold text-navy-900">
+                      {value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
 
           <section className="card p-5">
@@ -319,14 +326,21 @@ export default async function StockPage({
               <TrendingUp className="h-4 w-4 text-emerald-600" aria-hidden />
               Technicals
             </h2>
-            <dl className="space-y-2">
-              {technicals.map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-3">
-                  <dt className="text-sm text-slate-500">{label}</dt>
-                  <dd className="tabular text-sm font-semibold text-navy-900">{value}</dd>
-                </div>
-              ))}
-            </dl>
+            <table className="w-full">
+              <caption className="sr-only">{clean} technical indicators</caption>
+              <tbody>
+                {technicals.map(([label, value]) => (
+                  <tr key={label} className="border-b border-slate-100 last:border-0">
+                    <th scope="row" className="py-1 pr-3 text-left text-sm font-normal text-slate-500">
+                      {label}
+                    </th>
+                    <td className="tabular py-1 text-right text-sm font-semibold text-navy-900">
+                      {value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {stock.trend ? (
               <p className="mt-3 border-t border-slate-100 pt-3 text-sm">
                 <span className="text-slate-500">Trend: </span>
@@ -337,16 +351,21 @@ export default async function StockPage({
 
           <section className="card p-5">
             <h2 className="mb-3 text-sm font-bold text-navy-900">Performance</h2>
-            <dl className="space-y-2">
-              {performance.map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-3">
-                  <dt className="text-sm text-slate-500">{label}</dt>
-                  <dd className={`tabular text-sm font-semibold ${changeClass(value)}`}>
-                    {percent(value)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <table className="w-full">
+              <caption className="sr-only">{clean} price change by period</caption>
+              <tbody>
+                {performance.map(([label, value]) => (
+                  <tr key={label} className="border-b border-slate-100 last:border-0">
+                    <th scope="row" className="py-1 pr-3 text-left text-sm font-normal text-slate-500">
+                      {label}
+                    </th>
+                    <td className={`tabular py-1 text-right text-sm font-semibold ${changeClass(value)}`}>
+                      {percent(value)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
             {symbolEvents.length ? (
               <div className="mt-3 border-t border-slate-100 pt-3">

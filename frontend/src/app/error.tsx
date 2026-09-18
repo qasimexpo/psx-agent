@@ -40,7 +40,7 @@ export default function Error({
           </Link>
         </div>
         {error.digest ? (
-          <p className="mt-4 text-xs text-slate-400">Reference: {error.digest}</p>
+          <p className="mt-4 text-xs text-slate-500">Reference: {error.digest}</p>
         ) : null}
       </div>
     </div>

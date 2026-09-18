@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getScorecard, getTrackedPicks } from "@/lib/db";
 import { changeClass, money, percent, shortDate } from "@/lib/format";
 import { Disclaimer, EmptyState, SectionHeading, StatTile, SymbolLink } from "@/components/ui/Primitives";
+import { EDITOR, SITE_URL } from "@/lib/site";
 
 /**
  * The public scorecard. Publishing how the picks actually performed, including
@@ -26,8 +27,41 @@ const HORIZON_LABEL: Record<string, string> = {
 export default async function TrackRecordPage() {
   const [scorecard, picks] = await Promise.all([getScorecard(), getTrackedPicks(80)]);
 
+  // The scorecard is a dataset in the plain sense: one row per pick, marked
+  // to market. Describing it as one lets search and answer engines cite the
+  // numbers rather than paraphrase them.
+  const entryDates = picks.map((pick) => pick.entry_date).filter(Boolean).sort();
+  const dataset = {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    name: "SmartSarmaya halal stock pick track record",
+    description:
+      "Every AI-generated Shariah-compliant stock pick published by SmartSarmaya for the Pakistan Stock Exchange, with entry date, entry price, latest price and return, marked to market every trading day.",
+    url: `${SITE_URL}/track-record`,
+    license: `${SITE_URL}/terms-of-service`,
+    isAccessibleForFree: true,
+    creator: { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: "SmartSarmaya" },
+    maintainer: { "@type": "Person", "@id": EDITOR.id, name: EDITOR.name },
+    ...(entryDates.length
+      ? { temporalCoverage: `${entryDates[0]}/${entryDates[entryDates.length - 1]}` }
+      : {}),
+    spatialCoverage: { "@type": "Place", name: "Pakistan Stock Exchange" },
+    variableMeasured: [
+      "entry price (PKR)",
+      "latest price (PKR)",
+      "return since pick (%)",
+      "days held",
+      "target reached",
+    ],
+    keywords: ["PSX", "halal stocks", "KMI All Shares Islamic Index", "stock picks", "track record"],
+  };
+
   return (
     <div className="px-4 py-12 sm:px-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(dataset) }}
+      />
       <div className="mx-auto max-w-5xl">
         <SectionHeading
           as="h1"
@@ -95,7 +129,7 @@ export default async function TrackRecordPage() {
                         </td>
                         <td className="tabular whitespace-nowrap px-4 py-2.5 text-slate-600">
                           {shortDate(pick.entry_date)}
-                          <span className="block text-xs text-slate-400">
+                          <span className="block text-xs text-slate-500">
                             {pick.days_held} days
                           </span>
                         </td>
