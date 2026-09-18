@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img" aria-labelledby="t d">
+  <title id="t">How the PSX indices relate to each other</title>
+  <desc id="d">All listed companies contain the KMI All Shares Islamic Index, which contains the KMI-30. The KSE-100 is a separate size-based index that overlaps both: some of its members are Shariah compliant and some are not.</desc>
+  <defs>
+    <style>
+      .h{font:700 20px 'DM Sans',system-ui,sans-serif;fill:#0b132b}
+      .s{font:400 14px 'DM Sans',system-ui,sans-serif;fill:#475569}
+      .l{font:700 14px 'DM Sans',system-ui,sans-serif;fill:#0b132b}
+      .k{font:700 13px 'DM Sans',system-ui,sans-serif;letter-spacing:.06em}
+    </style>
+  </defs>
+  <rect width="1200" height="560" fill="#f6f8fb"/>
+
+  <!-- All listed -->
+  <rect x="60" y="60" width="760" height="440" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text class="k" x="84" y="94" fill="#64748b">ALL PSX LISTED COMPANIES · 500+</text>
+  <text class="s" x="84" y="116">Every share that trades on the exchange, halal or not.</text>
+
+  <!-- KMI All Shares -->
+  <rect x="100" y="150" width="520" height="320" rx="20" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+  <text class="k" x="124" y="184" fill="#047857">KMI ALL SHARES ISLAMIC INDEX · ~300</text>
+  <text class="s" x="124" y="206">Every company that passes the exchange's</text>
+  <text class="s" x="124" y="224">Shariah screens. This is the halal list.</text>
+
+  <!-- KMI-30 -->
+  <rect x="140" y="270" width="300" height="160" rx="16" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+  <text class="k" x="164" y="304" fill="#065f46">KMI-30</text>
+  <text class="s" x="164" y="328">The 30 largest and most liquid</text>
+  <text class="s" x="164" y="346">Shariah-compliant companies.</text>
+  <text class="s" x="164" y="364">A benchmark for Islamic funds.</text>
+
+  <!-- KSE-100 overlap -->
+  <rect x="420" y="240" width="360" height="220" rx="18" fill="#eef2ff" fill-opacity="0.85" stroke="#6366f1" stroke-width="2" stroke-dasharray="8 5"/>
+  <text class="k" x="444" y="274" fill="#4338ca">KSE-100</text>
+  <text class="s" x="444" y="298">The 100 largest companies by</text>
+  <text class="s" x="444" y="316">free-float market value, chosen</text>
+  <text class="s" x="444" y="334">by size, not by Shariah status.</text>
+  <text class="s" x="444" y="372">Inside the green: halal KSE-100 names</text>
+  <text class="s" x="444" y="390">(e.g. Lucky Cement, Engro Fertilizers).</text>
+  <text class="s" x="444" y="420">Outside it: conventional banks and</text>
+  <text class="s" x="444" y="438">others that fail a screen.</text>
+
+  <!-- legend -->
+  <g transform="translate(860,80)">
+    <text class="h" x="0" y="20">Reading the diagram</text>
+    <rect x="0" y="44" width="18" height="18" rx="4" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text class="l" x="28" y="58">Green = Shariah screened</text>
+    <text class="s" x="28" y="78">Membership is decided by the</text>
+    <text class="s" x="28" y="96">exchange and reviewed periodically.</text>
+    <rect x="0" y="120" width="18" height="18" rx="4" fill="#eef2ff" stroke="#6366f1" stroke-width="2" stroke-dasharray="4 3"/>
+    <text class="l" x="28" y="134">Dashed = size based</text>
+    <text class="s" x="28" y="154">The KSE-100 tells you a company is</text>
+    <text class="s" x="28" y="172">big, not that it is halal.</text>
+    <text class="l" x="0" y="216">What this means in practice</text>
+    <text class="s" x="0" y="240">• A KSE-100 stock can be haram.</text>
+    <text class="s" x="0" y="262">• A small-cap can be halal.</text>
+    <text class="s" x="0" y="284">• Check the green list, not the</text>
+    <text class="s" x="12" y="302">index headline.</text>
+    <text class="s" x="0" y="340" fill="#64748b">Counts are approximate and change</text>
+    <text class="s" x="0" y="358" fill="#64748b">at each index review.</text>
+  </g>
+</svg>

@@ -212,6 +212,17 @@ export default function BriefArticle({
           </p>
         ) : null}
 
+        <p className="mt-6 text-sm text-slate-600">
+          New to the brief?{" "}
+          <Link
+            href="/guides/how-to-read-the-daily-brief"
+            className="font-semibold text-emerald-700 hover:text-emerald-800"
+          >
+            How to read it in three minutes
+          </Link>
+          .
+        </p>
+
         <GoogleAd slot={AD_SLOT_ARTICLE} className="mt-8" />
 
         <Disclaimer className="mt-8 border-t border-slate-200 pt-5" />
