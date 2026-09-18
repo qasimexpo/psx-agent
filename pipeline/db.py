@@ -376,6 +376,22 @@ def _migrate_legacy() -> None:
                     )
                 except SQLAlchemyError:
                     pass
+            # create_all only creates missing tables, so a table that predates
+            # the dated constraint never received it. Without it every upsert
+            # fails with "no unique or exclusion constraint matching the ON
+            # CONFLICT specification", which is what stopped the picks job.
+            if "category" not in columns and engine.dialect.name == "postgresql":
+                constraints = {
+                    item["name"] for item in inspector.get_unique_constraints("top_picks")
+                }
+                if "uq_top_picks_tf_sector_date" not in constraints:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE top_picks ADD CONSTRAINT uq_top_picks_tf_sector_date "
+                            "UNIQUE (timeframe, sector, pick_date)"
+                        )
+                    )
+                    logger.info("Added the dated unique constraint to top_picks.")
 
     # ticker_data and news_and_events are superseded by stocks and news_items.
     with engine.begin() as conn:

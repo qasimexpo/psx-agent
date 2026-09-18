@@ -27,7 +27,11 @@ export default function GoogleAd({
 }: GoogleAdProps) {
   const pushedRef = useRef(false);
   const adRef = useRef<HTMLModElement | null>(null);
-  const [isFilled, setIsFilled] = useState(false);
+  // Three states, not two: AdSense measures the <ins> when it is pushed, and
+  // a wrapper that starts as display:none gives it zero width. That threw
+  // "No slot size for availableWidth=0" on every page and the slot never
+  // filled. The wrapper now stays in layout until Google reports a status.
+  const [status, setStatus] = useState<"pending" | "filled" | "unfilled">("pending");
   const normalizedSlot = slot?.trim() ?? "";
   const hasValidSlot =
     normalizedSlot.length > 0 &&
@@ -49,12 +53,8 @@ export default function GoogleAd({
     if (!el || !hasValidSlot || !ADS_CLIENT) return;
 
     const readStatus = () => {
-      const status = el.getAttribute("data-ad-status");
-      if (status === "filled") {
-        setIsFilled(true);
-      } else if (status === "unfilled") {
-        setIsFilled(false);
-      }
+      const reported = el.getAttribute("data-ad-status");
+      if (reported === "filled" || reported === "unfilled") setStatus(reported);
     };
 
     readStatus();
@@ -70,11 +70,15 @@ export default function GoogleAd({
     return null;
   }
 
+  const frame =
+    status === "filled"
+      ? "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      : status === "unfilled"
+        ? "hidden"
+        : "min-h-px w-full";
+
   return (
-    <div
-      suppressHydrationWarning
-      className={`${isFilled ? "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" : "hidden"} ${className}`}
-    >
+    <div suppressHydrationWarning className={`${frame} ${className}`}>
       <ins
         ref={adRef}
         suppressHydrationWarning

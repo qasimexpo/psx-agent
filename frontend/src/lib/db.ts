@@ -229,6 +229,8 @@ export type BriefRow = {
   symbols: string[];
   index_value: number | null;
   index_change_pct: number | null;
+  /** When the pipeline wrote this edition, as an ISO instant. */
+  updated_at: string | null;
 };
 
 export type Scorecard = {
@@ -304,6 +306,17 @@ function toIsoDay(value: unknown): string {
 }
 
 const maybeIsoDay = (value: unknown): string | null => (value ? toIsoDay(value) : null);
+
+/**
+ * A timestamptz column as an ISO 8601 instant, or null. Structured data and
+ * the sitemap need the "2026-09-17T11:15:00.000Z" form; the stringified Date
+ * the drivers return is not parseable by either consumer.
+ */
+function toIsoInstant(value: unknown): string | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
 
 export async function getTickerQuotes(limit = 40): Promise<Quote[]> {
   const rows = await query<Row>`
@@ -490,7 +503,7 @@ export async function getNews(region?: string, limit = 8): Promise<NewsRow[]> {
 export async function getLatestBrief(): Promise<BriefRow | null> {
   const rows = await query<Row>`
     SELECT brief_date, session, headline, summary, body_html, key_points,
-           symbols, index_value, index_change_pct
+           symbols, index_value, index_change_pct, updated_at
     FROM daily_briefs
     ORDER BY brief_date DESC, CASE WHEN session = 'closing' THEN 0 ELSE 1 END
     LIMIT 1
@@ -502,12 +515,12 @@ export async function getBriefByDate(date: string, session?: string): Promise<Br
   const rows = session
     ? await query<Row>`
         SELECT brief_date, session, headline, summary, body_html, key_points,
-               symbols, index_value, index_change_pct
+               symbols, index_value, index_change_pct, updated_at
         FROM daily_briefs WHERE brief_date = ${date} AND session = ${session} LIMIT 1
       `
     : await query<Row>`
         SELECT brief_date, session, headline, summary, body_html, key_points,
-               symbols, index_value, index_change_pct
+               symbols, index_value, index_change_pct, updated_at
         FROM daily_briefs WHERE brief_date = ${date}
         ORDER BY CASE WHEN session = 'closing' THEN 0 ELSE 1 END LIMIT 1
       `;
@@ -517,7 +530,7 @@ export async function getBriefByDate(date: string, session?: string): Promise<Br
 export async function listBriefs(limit = 30): Promise<BriefRow[]> {
   const rows = await query<Row>`
     SELECT brief_date, session, headline, summary, body_html, key_points,
-           symbols, index_value, index_change_pct
+           symbols, index_value, index_change_pct, updated_at
     FROM daily_briefs
     ORDER BY brief_date DESC, CASE WHEN session = 'closing' THEN 0 ELSE 1 END
     LIMIT ${limit}
@@ -536,6 +549,7 @@ function toBrief(row: Row): BriefRow {
     symbols: Array.isArray(row.symbols) ? (row.symbols as string[]) : [],
     index_value: maybeNum(row.index_value),
     index_change_pct: maybeNum(row.index_change_pct),
+    updated_at: toIsoInstant(row.updated_at),
   };
 }
 
@@ -585,16 +599,24 @@ export async function getStockNote(symbol: string): Promise<StockNote | null> {
     bull_case: String(row.bull_case ?? ""),
     bear_case: String(row.bear_case ?? ""),
     verdict: String(row.verdict ?? ""),
-    updated_at: String(row.updated_at),
+    updated_at: toIsoInstant(row.updated_at) ?? String(row.updated_at),
   };
 }
 
 /** Symbols that should get their own indexable page. */
 export async function listIndexableSymbols(limit = 400): Promise<
-  { symbol: string; name: string; sector_name: string; is_kmi: boolean; current_price: number; change_pct: number }[]
+  {
+    symbol: string;
+    name: string;
+    sector_name: string;
+    is_kmi: boolean;
+    current_price: number;
+    change_pct: number;
+    quote_at: string | null;
+  }[]
 > {
   const rows = await query<Row>`
-    SELECT symbol, name, sector_name, is_kmi, current_price, change_pct
+    SELECT symbol, name, sector_name, is_kmi, current_price, change_pct, quote_at
     FROM stocks
     WHERE current_price > 0 AND is_debt = false AND is_etf = false
       AND (is_kse100 = true OR is_kmi = true)
@@ -608,6 +630,7 @@ export async function listIndexableSymbols(limit = 400): Promise<
     is_kmi: Boolean(row.is_kmi),
     current_price: num(row.current_price),
     change_pct: num(row.change_pct),
+    quote_at: toIsoInstant(row.quote_at),
   }));
 }
 

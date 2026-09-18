@@ -42,10 +42,15 @@ export function toneOf(value: number | null | undefined): "up" | "down" | "flat"
   return value > 0 ? "up" : "down";
 }
 
-/** Colour classes for a change value, consistent across the whole site. */
+/**
+ * Colour classes for a change value, consistent across the whole site.
+ * Every caller renders on a white card; emerald-600 is 3.8:1 there, short of
+ * the 4.5:1 that WCAG AA asks of body-size text, so the up tone is one step
+ * darker than the brand green used on the dark panels.
+ */
 export function changeClass(value: number | null | undefined): string {
   const tone = toneOf(value);
-  if (tone === "up") return "text-emerald-600";
+  if (tone === "up") return "text-emerald-700";
   if (tone === "down") return "text-rose-600";
   return "text-slate-500";
 }

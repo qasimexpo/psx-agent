@@ -26,6 +26,7 @@ export default async function BriefIndexPage() {
     <div className="px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-4xl">
         <SectionHeading
+          as="h1"
           eyebrow="Twice every trading day"
           title="PSX market brief"
           description="A short, specific read on what the Pakistan Stock Exchange did and why. Written from live exchange data before the open and after the close."

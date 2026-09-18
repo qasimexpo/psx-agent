@@ -9,17 +9,20 @@ export function SectionHeading({
   title,
   description,
   action,
+  as: Heading = "h2",
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   action?: ReactNode;
+  /** Pass "h1" when this heading opens the page rather than a section of it. */
+  as?: "h1" | "h2";
 }) {
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         {eyebrow ? <p className="eyebrow mb-1.5">{eyebrow}</p> : null}
-        <h2 className="section-title">{title}</h2>
+        <Heading className="section-title">{title}</Heading>
         {description ? (
           <p className="mt-1.5 max-w-2xl text-sm text-slate-600">{description}</p>
         ) : null}

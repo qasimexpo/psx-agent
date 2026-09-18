@@ -23,6 +23,7 @@ import { AD_SLOT_ARTICLE } from "@/lib/adsense";
 import { ogImages } from "@/lib/og";
 import { slugForSectorCode } from "@/lib/sectors";
 import { SITE_URL } from "@/lib/site";
+import { isSecondaryInstrument, parentSymbol, shortName } from "@/lib/symbols";
 
 /**
  * One page per listed company. These are what give the site something for
@@ -49,22 +50,46 @@ export async function generateMetadata({
   if (!stock) return { title: `${clean} share price` };
 
   const halal = stock.is_kmi ? "Shariah compliant" : "not Shariah compliant";
-  return {
-    title: `${clean} share price, technicals and Shariah status`,
-    description: `${stock.name} (${clean}) trades at ${stock.current_price.toFixed(2)} PKR on the Pakistan Stock Exchange. Live price, RSI, moving averages, 52-week range and KMI Islamic index status. ${stock.name} is ${halal}.`,
+  const label = companyLabel(stock.name, clean);
+  const images = ogImages({ type: "stock", symbol: clean });
+  const metadata: Metadata = {
+    // Absolute, because the layout's " | SmartSarmaya" suffix pushed every
+    // stock title past what a result page shows. The company name leads: it
+    // is what people type, and the ticker alone was all the old title had.
+    title: { absolute: `${label} share price & halal status` },
+    // Kept under 155 characters so the halal verdict and price both survive
+    // the snippet. "Latest" rather than "live": quotes are end-of-day.
+    description: `${label} is ${halal} on the PSX. Latest price ${money(stock.current_price)} PKR (${percent(stock.change_pct)}). RSI, moving averages, 52-week range and KMI Islamic index status.`,
     alternates: { canonical: `/stock/${clean}` },
     openGraph: {
-      title: `${clean} - ${stock.name} share price and analysis`,
-      description: `Live PSX price, technical position and Shariah status for ${stock.name}.`,
+      title: `${label} share price and analysis`,
+      description: `PSX price, technical position and Shariah status for ${stock.name}.`,
       url: `${SITE_URL}/stock/${clean}`,
       type: "website",
-      images: ogImages({ type: "stock", symbol: clean }),
+      images,
     },
-    twitter: {
-      card: "summary_large_image",
-      images: ogImages({ type: "stock", symbol: clean }),
-    },
+    twitter: { card: "summary_large_image", images },
   };
+
+  // Ex-entitlement tickers are the parent share for a few days; rights and
+  // preference listings are thin copies of the ordinary share's template.
+  // Neither should compete with the company page in search.
+  const parent = parentSymbol(clean, stock.name);
+  if (parent) {
+    return (await getStock(parent))
+      ? { ...metadata, alternates: { canonical: `/stock/${parent}` } }
+      : { ...metadata, robots: { index: false, follow: true } };
+  }
+  if (isSecondaryInstrument(stock.name)) {
+    return { ...metadata, robots: { index: false, follow: true } };
+  }
+  return metadata;
+}
+
+/** "Pakistan Petroleum (PPL)", or just the ticker when the feed has no name. */
+function companyLabel(name: string, symbol: string): string {
+  const short = shortName(name);
+  return short && short !== symbol ? `${short} (${symbol})` : symbol;
 }
 
 export default async function StockPage({
@@ -79,23 +104,30 @@ export default async function StockPage({
   const stock = await getStock(clean);
   if (!stock) notFound();
 
-  const [note, events, peers] = await Promise.all([
+  const parentTicker = parentSymbol(clean, stock.name);
+  const [note, events, peers, parent] = await Promise.all([
     getStockNote(clean),
     getEventsFor([clean]),
     listSectorPeers(clean, stock.sector_code),
+    parentTicker ? getStock(parentTicker) : null,
   ]);
   const position = rangePosition(stock.current_price, stock.low_52w, stock.high_52w);
   const symbolEvents = events[clean] ?? [];
   const sectorSlug = slugForSectorCode(stock.sector_code, stock.is_kmi);
+  const hasName = stock.name !== clean;
 
+  // The listed company itself, which is the entity a search engine can tie
+  // this page to. FinancialProduct, used before, describes loans and
+  // accounts and nothing consumed it.
   const schema = {
     "@context": "https://schema.org",
-    "@type": "FinancialProduct",
-    name: `${stock.name} (${clean})`,
-    description: note?.overview || `${stock.name} share price and technical position on the PSX.`,
+    "@type": "Corporation",
+    name: stock.name,
+    tickerSymbol: clean,
     url: `${SITE_URL}/stock/${clean}`,
-    category: stock.sector_name,
-    provider: { "@type": "Organization", name: "Pakistan Stock Exchange" },
+    sameAs: `https://dps.psx.com.pk/company/${clean}`,
+    description: note?.overview || `${stock.name} share price and technical position on the PSX.`,
+    ...(note ? { dateModified: note.updated_at } : {}),
   };
 
   // Breadcrumbs give Google the site hierarchy and win the breadcrumb trail
@@ -150,7 +182,7 @@ export default async function StockPage({
       <div className="mx-auto max-w-5xl">
         <Link
           href="/stocks"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-emerald-700"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-emerald-700"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           All stocks
@@ -159,10 +191,18 @@ export default async function StockPage({
         <header className="card mt-4 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-navy-900 sm:text-3xl">
-                  {clean}
-                </h1>
+              {/* The company name is what people search for, so it belongs in
+                  the H1 rather than in a paragraph under a bare ticker. */}
+              <h1 className="text-2xl font-bold tracking-tight text-navy-900 sm:text-3xl">
+                {hasName ? (
+                  <>
+                    {stock.name} <span className="font-semibold text-slate-500">({clean})</span>
+                  </>
+                ) : (
+                  clean
+                )}
+              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 {stock.is_kmi ? (
                   <span className="badge badge-halal">
                     <ShieldCheck className="h-3 w-3" aria-hidden />
@@ -174,8 +214,7 @@ export default async function StockPage({
                 {stock.is_kse100 ? <span className="badge badge-neutral">KSE-100</span> : null}
                 {stock.is_kmi30 ? <span className="badge badge-neutral">KMI-30</span> : null}
               </div>
-              <p className="mt-1 text-slate-600">{stock.name}</p>
-              <p className="text-sm text-slate-500">{stock.sector_name}</p>
+              <p className="mt-2 text-sm text-slate-500">{stock.sector_name}</p>
             </div>
 
             <div className="text-right">
@@ -185,11 +224,25 @@ export default async function StockPage({
               <p className={`tabular text-sm font-semibold ${changeClass(stock.change_pct)}`}>
                 {money(stock.change)} ({percent(stock.change_pct)})
               </p>
-              <p className="mt-0.5 text-xs text-slate-400">
+              <p className="mt-0.5 text-xs text-slate-500">
                 Updated {relativeTime(stock.quote_at)}
               </p>
             </div>
           </div>
+
+          {parent ? (
+            <p className="mt-4 text-sm text-slate-600">
+              {clean} is the temporary ticker for {parent.name} while it trades ex-entitlement.
+              The company&apos;s own page is{" "}
+              <Link
+                href={`/stock/${parent.symbol}`}
+                className="font-semibold text-emerald-700 hover:text-emerald-800"
+              >
+                {parent.symbol}
+              </Link>
+              .
+            </p>
+          ) : null}
 
           {position !== null ? (
             <div className="mt-5">
@@ -222,7 +275,7 @@ export default async function StockPage({
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-navy-900">AI analysis</h2>
               <span className="badge badge-neutral">{note.verdict}</span>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-slate-500">
                 Refreshed {relativeTime(note.updated_at)}
               </span>
             </div>
@@ -357,7 +410,7 @@ export default async function StockPage({
                       {percent(peer.change_pct)}
                     </span>
                     {peer.is_kmi ? (
-                      <span className="text-xs text-emerald-600">halal</span>
+                      <span className="text-xs text-emerald-700">halal</span>
                     ) : null}
                   </Link>
                 </li>

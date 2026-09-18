@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Disclaimer, SectionHeading } from "@/components/ui/Primitives";
-import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
+import { FAQ_ITEMS, faqSchema } from "@/lib/faq";
+import { CONTACT_EMAIL, SITE_NAME, SITE_URL } from "@/lib/site";
 
 /**
  * The trust anchor page. Everything here has to be literally true, because the
@@ -17,8 +18,13 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div className="px-4 py-12 sm:px-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema(`${SITE_URL}/about`)) }}
+      />
       <div className="mx-auto max-w-3xl">
         <SectionHeading
+          as="h1"
           eyebrow="About"
           title={`What ${SITE_NAME} is`}
           description="A free research site for people who invest on the Pakistan Stock Exchange and want to keep their holdings Shariah compliant without paying for a broker research subscription."
@@ -258,6 +264,18 @@ export default function AboutPage() {
             </Link>{" "}
             set out the rest.
           </p>
+        </div>
+
+        <div className="card mt-5 p-5 sm:p-6">
+          <h2 className="text-base font-bold text-navy-900">Common questions</h2>
+          <dl className="mt-3 space-y-4">
+            {FAQ_ITEMS.map((item) => (
+              <div key={item.question}>
+                <dt className="text-sm font-semibold text-navy-900">{item.question}</dt>
+                <dd className="mt-1 text-sm leading-relaxed text-slate-700">{item.answer}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
         <Disclaimer className="mt-8" />

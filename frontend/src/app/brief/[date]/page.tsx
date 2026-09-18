@@ -7,12 +7,25 @@ import { changeClass, longDate, money, percent } from "@/lib/format";
 import { Disclaimer, SymbolLink } from "@/components/ui/Primitives";
 import GoogleAd from "@/components/GoogleAd";
 import { AD_SLOT_ARTICLE } from "@/lib/adsense";
-import { ogImages } from "@/lib/og";
+import { ogImages, ogUrl } from "@/lib/og";
 import { SITE_URL } from "@/lib/site";
 
 export const revalidate = 600;
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The summary is a full paragraph; a result page shows about 155 characters
+ * of it. Cutting at a sentence keeps the snippet readable, and the whole
+ * summary is still the first thing on the page.
+ */
+function snippet(summary: string, limit = 155): string {
+  if (summary.length <= limit) return summary;
+  const head = summary.slice(0, limit);
+  const sentenceEnd = head.lastIndexOf(". ");
+  if (sentenceEnd > 60) return head.slice(0, sentenceEnd + 1);
+  return `${head.slice(0, head.lastIndexOf(" "))}…`;
+}
 
 export async function generateStaticParams() {
   const briefs = await listBriefs(20);
@@ -38,15 +51,17 @@ export async function generateMetadata({
   if (!brief) return { title: `PSX market brief for ${date}` };
 
   return {
-    title: brief.headline,
-    description: brief.summary.slice(0, 300),
+    // Headlines already run to 60 characters; the brand suffix would push
+    // every one past the cutoff, and the publisher is in the schema anyway.
+    title: { absolute: brief.headline },
+    description: snippet(brief.summary),
     alternates: { canonical: `/brief/${date}` },
     openGraph: {
       title: brief.headline,
-      description: brief.summary.slice(0, 300),
+      description: snippet(brief.summary),
       url: `${SITE_URL}/brief/${date}`,
       type: "article",
-      publishedTime: date,
+      publishedTime: brief.updated_at ?? date,
       images: ogImages({ type: "brief", date }),
     },
     twitter: {
@@ -67,20 +82,27 @@ export default async function BriefPage({
   const brief = await getBriefByDate(date);
   if (!brief) notFound();
 
+  // Article rich results need an image and full timestamps; a bare date and
+  // no image kept these out of Top Stories entirely. The share card the
+  // pipeline already renders for social doubles as the article image.
+  const published = brief.updated_at ?? brief.brief_date;
   const articleSchema = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     headline: brief.headline,
     description: brief.summary,
-    datePublished: brief.brief_date,
-    dateModified: brief.brief_date,
-    author: { "@type": "Organization", name: "SmartSarmaya" },
+    image: [ogUrl({ type: "brief", date: brief.brief_date })],
+    datePublished: published,
+    dateModified: published,
+    author: { "@type": "Organization", name: "SmartSarmaya", url: `${SITE_URL}/about` },
     publisher: {
       "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
       name: "SmartSarmaya",
       logo: { "@type": "ImageObject", url: `${SITE_URL}/images/logo.jpg` },
     },
     mainEntityOfPage: `${SITE_URL}/brief/${brief.brief_date}`,
+    isAccessibleForFree: true,
   };
 
   const breadcrumbs = {

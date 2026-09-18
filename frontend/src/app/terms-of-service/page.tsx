@@ -17,6 +17,7 @@ export default function TermsOfServicePage() {
     <div className="px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-3xl">
         <SectionHeading
+          as="h1"
           eyebrow={`Last updated ${LAST_UPDATED}`}
           title="Terms of service"
           description="The rules for using this site. The important part is section 3: everything here is educational, and none of it is advice."

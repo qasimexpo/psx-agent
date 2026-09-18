@@ -64,7 +64,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/images/banner 1.jpg",
+        url: "/images/og-default.jpg",
         width: 1200,
         height: 630,
         alt: "SmartSarmaya, halal AI stock research for the Pakistan Stock Exchange",
@@ -76,7 +76,7 @@ export const metadata: Metadata = {
     title: "SmartSarmaya | Halal AI stock research for PSX",
     description:
       "Audit your PSX portfolio and read AI halal picks screened against the exchange's own Islamic index.",
-    images: ["/images/banner 1.jpg"],
+    images: ["/images/og-default.jpg"],
   },
   robots: {
     index: true,

@@ -17,6 +17,7 @@ export default function PrivacyPolicyPage() {
     <div className="px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-3xl">
         <SectionHeading
+          as="h1"
           eyebrow={`Last updated ${LAST_UPDATED}`}
           title="Privacy policy"
           description="What we collect, what we do not collect, and which third parties see anything at all. Written to be read rather than skimmed past."

@@ -30,6 +30,7 @@ export default async function TrackRecordPage() {
     <div className="px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-5xl">
         <SectionHeading
+          as="h1"
           eyebrow="Updated every trading day"
           title="Our track record"
           description="Every pick we publish is recorded with the price at the time and marked to market from then on. Nothing is removed when it goes wrong."
