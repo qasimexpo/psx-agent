@@ -94,16 +94,19 @@ export default function RootLayout({
       className={`${dmSans.variable} h-full scroll-smooth`}
       data-scroll-behavior="smooth"
     >
-      <head>
+      <body className="flex min-h-full flex-col font-sans antialiased">
+        {/* AdSense is the largest script on the page (250 KB, 130-170 ms of
+            main-thread work) and it was competing with hydration. Loading it
+            once the page is idle keeps LCP and INP clean; the slots queue
+            their push() calls and fill as soon as the script arrives. */}
         {adsenseClient ? (
-          <script
-            async
+          <Script
+            id="adsense"
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
+            strategy="lazyOnload"
             crossOrigin="anonymous"
           />
         ) : null}
-      </head>
-      <body className="flex min-h-full flex-col font-sans antialiased">
         <JsonLd />
         <a
           href="#main"

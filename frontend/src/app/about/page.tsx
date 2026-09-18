@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Disclaimer, SectionHeading } from "@/components/ui/Primitives";
 import { FAQ_ITEMS, faqSchema } from "@/lib/faq";
-import { CONTACT_EMAIL, SITE_NAME, SITE_URL } from "@/lib/site";
+import { CONTACT_EMAIL, EDITOR, SITE_NAME, SITE_URL } from "@/lib/site";
 
 /**
  * The trust anchor page. Everything here has to be literally true, because the
@@ -49,6 +49,27 @@ export default function AboutPage() {
             >
               track record page
             </Link>
+            .
+          </p>
+        </div>
+
+        <div id="editor" className="card mt-5 scroll-mt-20 p-5 sm:p-6">
+          <h2 className="text-base font-bold text-navy-900">Who is responsible for it</h2>
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            <strong className="font-semibold text-navy-900">{EDITOR.name}</strong>,{" "}
+            {EDITOR.jobTitle.toLowerCase()}. {EDITOR.bio}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            The briefs, picks and company notes are written by a language model from exchange
+            data, as described below, and published automatically. The editor sets the rules the
+            model works under, decides what the site does and does not claim, and is the person
+            to write to when something on it is wrong:{" "}
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="font-semibold text-emerald-600 underline-offset-2 hover:underline"
+            >
+              {CONTACT_EMAIL}
+            </a>
             .
           </p>
         </div>

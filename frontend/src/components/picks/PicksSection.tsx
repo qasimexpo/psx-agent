@@ -64,7 +64,7 @@ function PickCard({ pick, rank, livePrice }: { pick: Pick; rank: number; livePri
       </div>
 
       <div className="flex-1 space-y-2.5 px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{pick.sector}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{pick.sector}</p>
         <p className="text-sm leading-relaxed text-slate-700">{pick.summary}</p>
         <p className="text-sm leading-relaxed text-slate-600">
           <span className="font-semibold text-navy-900">Why now: </span>
@@ -80,7 +80,7 @@ function PickCard({ pick, rank, livePrice }: { pick: Pick; rank: number; livePri
 
       <div className="grid grid-cols-3 gap-px border-t border-slate-100 bg-slate-100">
         <div className="bg-white px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             At pick
           </p>
           <p className="tabular mt-0.5 text-sm font-bold text-navy-900">
@@ -88,13 +88,13 @@ function PickCard({ pick, rank, livePrice }: { pick: Pick; rank: number; livePri
           </p>
         </div>
         <div className="bg-white px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             Buy zone
           </p>
           <p className="tabular mt-0.5 text-sm font-bold text-emerald-700">{pick.buy_zone}</p>
         </div>
         <div className="bg-white px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             Target
           </p>
           <p className="tabular mt-0.5 text-sm font-bold text-navy-900">{pick.exit_target}</p>
@@ -189,7 +189,7 @@ export default function PicksSection({
               a scroller, which is what put a native scrollbar under the row. */}
           <div className="px-4 py-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-              <span className="shrink-0 pt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="shrink-0 pt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 Sector
               </span>
 

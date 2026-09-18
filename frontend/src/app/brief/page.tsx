@@ -4,6 +4,7 @@ import { ArrowRight, Newspaper } from "lucide-react";
 import { listBriefs } from "@/lib/db";
 import { changeClass, longDate, money, percent } from "@/lib/format";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
+import { briefPath } from "@/lib/briefs";
 
 export const revalidate = 600;
 
@@ -56,13 +57,13 @@ export default async function BriefIndexPage() {
                 </div>
 
                 <h2 className="text-lg font-bold leading-snug text-navy-900">
-                  <Link href={`/brief/${brief.brief_date}`} className="hover:text-emerald-700">
+                  <Link href={briefPath(brief)} className="hover:text-emerald-700">
                     {brief.headline}
                   </Link>
                 </h2>
                 <p className="mt-1.5 leading-relaxed text-slate-600">{brief.summary}</p>
                 <Link
-                  href={`/brief/${brief.brief_date}`}
+                  href={briefPath(brief)}
                   className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
                 >
                   Read the brief

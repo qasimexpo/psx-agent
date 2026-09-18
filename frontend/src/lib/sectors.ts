@@ -130,6 +130,13 @@ export function slugForSectorCode(code: string, isKmi: boolean): string | null {
   return slug;
 }
 
+/** The PSX sector codes a pick-sector page covers. */
+export function codesForSectorSlug(slug: string): string[] {
+  return Object.entries(SECTOR_CODE_SLUGS)
+    .filter(([, value]) => value === slug)
+    .map(([code]) => code);
+}
+
 export function slugForSector(name: string): string | null {
   return PICK_SECTORS.find((sector) => sector.name === name)?.slug ?? null;
 }

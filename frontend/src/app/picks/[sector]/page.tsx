@@ -7,8 +7,15 @@ import { Disclaimer } from "@/components/ui/Primitives";
 import GoogleAd from "@/components/GoogleAd";
 import { AD_SLOT_ARTICLE } from "@/lib/adsense";
 import { ogImages } from "@/lib/og";
-import { getTickerQuotes, getTopPicks } from "@/lib/db";
-import { PICK_SECTORS, SECTOR_ALL, SECTOR_NAMES, sectorBySlug } from "@/lib/sectors";
+import { getTickerQuotes, getTopPicks, listHalalStocksInSectors } from "@/lib/db";
+import { changeClass, money, percent } from "@/lib/format";
+import {
+  PICK_SECTORS,
+  SECTOR_ALL,
+  SECTOR_NAMES,
+  codesForSectorSlug,
+  sectorBySlug,
+} from "@/lib/sectors";
 import { SITE_URL } from "@/lib/site";
 
 /**
@@ -57,11 +64,12 @@ export default async function SectorPicksPage({
   const sector = sectorBySlug(slug);
   if (!sector) notFound();
 
-  const [daily, monthly, yearly, quotes] = await Promise.all([
+  const [daily, monthly, yearly, quotes, constituents] = await Promise.all([
     getTopPicks("daily", sector.name),
     getTopPicks("monthly", sector.name),
     getTopPicks("yearly", sector.name),
     getTickerQuotes(60),
+    listHalalStocksInSectors(codesForSectorSlug(sector.slug)),
   ]);
 
   const bundle: PicksBundle = {
@@ -143,6 +151,40 @@ export default async function SectorPicksPage({
               See how past picks performed
             </Link>
           </div>
+
+          {constituents.length ? (
+            <div className="card mt-6 p-5">
+              <h2 className="text-base font-bold text-navy-900">
+                Every Shariah-compliant {sector.title.toLowerCase().replace(/ stocks$/, "")} stock
+                on the PSX
+              </h2>
+              <p className="mt-1.5 text-sm text-slate-600">
+                All {constituents.length} KMI All Shares Islamic Index constituents in this sector,
+                by turnover. The picks above are chosen from this list.
+              </p>
+              <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                {constituents.map((stock) => (
+                  <li key={stock.symbol}>
+                    <Link
+                      href={`/stock/${stock.symbol}`}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm transition hover:border-emerald-300"
+                    >
+                      <span className="min-w-0">
+                        <span className="font-semibold text-navy-900">{stock.symbol}</span>
+                        <span className="ml-2 truncate text-slate-600">{stock.name}</span>
+                      </span>
+                      <span className="tabular shrink-0 text-right">
+                        <span className="text-slate-700">{money(stock.current_price)}</span>
+                        <span className={`ml-2 text-xs font-semibold ${changeClass(stock.change_pct)}`}>
+                          {percent(stock.change_pct)}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <GoogleAd slot={AD_SLOT_ARTICLE} className="mt-6" />
 

@@ -12,6 +12,20 @@ export const SITE_DESCRIPTION =
 export const CONTACT_EMAIL = "info@smartsarmaya.com";
 
 /**
+ * The person responsible for what the site publishes. Finance is a topic
+ * where search engines and readers both want a name behind the page; the
+ * briefs and picks are written by a model, so the honest claim is editor,
+ * not author. The bio is a placeholder to be replaced with the real one.
+ */
+export const EDITOR = {
+  name: "Qasim Riaz",
+  jobTitle: "Founder and editor",
+  bio: "Builds and runs SmartSarmaya, sets the halal screening rules it follows, and answers for what it publishes. A retail investor on the Pakistan Stock Exchange.",
+  url: `${SITE_URL}/about#editor`,
+  id: `${SITE_URL}/#editor`,
+} as const;
+
+/**
  * Social profiles. Empty entries are dropped, so the footer and the
  * Organization sameAs list stay correct while a profile does not exist yet.
  * Fill these in Vercel once each page is live.

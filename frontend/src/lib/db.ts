@@ -635,6 +635,52 @@ export async function listIndexableSymbols(limit = 400): Promise<
 }
 
 /**
+ * Every ordinary share with a page worth submitting. The directory shows
+ * only KSE-100 and KMI names, but movers, briefs and sector peers link to
+ * the rest, and "is X halal?" has an answer either way, so the sitemap
+ * carries all of them. Rights, preference and ex-entitlement tickers carry
+ * no company name in the feed and are excluded by the name check.
+ */
+export async function listSitemapSymbols(limit = 800): Promise<
+  { symbol: string; is_kmi: boolean; quote_at: string | null }[]
+> {
+  const rows = await query<Row>`
+    SELECT symbol, is_kmi, quote_at
+    FROM stocks
+    WHERE current_price > 0 AND is_debt = false AND is_etf = false
+      AND name <> '' AND name <> symbol
+      AND name NOT ILIKE '%(right)%' AND name NOT ILIKE '%(pref)%'
+    ORDER BY is_kse100 DESC, is_kmi DESC, volume DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((row) => ({
+    symbol: String(row.symbol),
+    is_kmi: Boolean(row.is_kmi),
+    quote_at: toIsoInstant(row.quote_at),
+  }));
+}
+
+/**
+ * Every Shariah-compliant company in a set of PSX sectors, for the sector
+ * pages. A sector page that lists all of its constituents is the hub the
+ * stock pages were missing: most had one or two inbound links.
+ */
+export async function listHalalStocksInSectors(sectorCodes: string[], limit = 60): Promise<Quote[]> {
+  if (!sectorCodes.length) return [];
+  const rows = await query<Row>`
+    SELECT symbol, name, sector_code, sector_name, is_kmi, is_kse100,
+           current_price, change, change_pct, volume, high, low
+    FROM stocks
+    WHERE sector_code = ANY(${sectorCodes}) AND is_kmi = true
+      AND current_price > 0 AND is_debt = false AND is_etf = false
+      AND name <> '' AND name <> symbol
+    ORDER BY volume DESC
+    LIMIT ${limit}
+  `;
+  return rows.map(toQuote);
+}
+
+/**
  * Other companies in the same PSX sector. Programmatic pages fail to index
  * mainly because nothing links to them, so every stock page links out to its
  * neighbours.

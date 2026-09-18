@@ -72,7 +72,7 @@ export function StatTile({
 }) {
   const valueTone =
     tone === "positive"
-      ? "text-emerald-600"
+      ? "text-emerald-700"
       : tone === "negative"
         ? "text-rose-600"
         : "text-navy-900";
