@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getMarketStats, listBriefs, listSitemapSymbols } from "@/lib/db";
 import { briefPath } from "@/lib/briefs";
+import { listGuides } from "@/lib/guides";
 import { PICK_SECTORS } from "@/lib/sectors";
 import { SITE_URL } from "@/lib/site";
 
@@ -29,10 +30,11 @@ const latest = (...dates: (Date | undefined)[]): Date | undefined =>
     .sort((a, b) => b.getTime() - a.getTime())[0];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [symbols, briefs, market] = await Promise.all([
+  const [symbols, briefs, market, guides] = await Promise.all([
     listSitemapSymbols(),
     listBriefs(240),
     getMarketStats(),
+    listGuides(),
   ]);
 
   // lastmod only helps when it tracks real changes. Google ignores it on
@@ -48,6 +50,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/stocks`, lastModified: marketAt, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/picks`, lastModified: marketAt, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/track-record`, lastModified: marketAt, changeFrequency: "daily", priority: 0.8 },
+    {
+      url: `${SITE_URL}/guides`,
+      lastModified: asDate(guides[0]?.updated),
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
     { url: `${SITE_URL}/calculators`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/contact`, changeFrequency: "monthly", priority: 0.5 },
@@ -78,5 +86,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: brief.session === "morning" ? 0.5 : 0.6,
   }));
 
-  return [...staticRoutes, ...sectorRoutes, ...stockRoutes, ...briefRoutes];
+  const guideRoutes: MetadataRoute.Sitemap = guides.map((guide) => ({
+    url: `${SITE_URL}/guides/${guide.slug}`,
+    lastModified: asDate(guide.updated),
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
+  return [...staticRoutes, ...sectorRoutes, ...guideRoutes, ...stockRoutes, ...briefRoutes];
 }

@@ -20,6 +20,7 @@ const COLUMNS = [
       { href: "/stocks", label: "Stock directory" },
       { href: "/#events", label: "Dividends and events" },
       { href: "/track-record", label: "Pick track record" },
+      { href: "/guides", label: "Guides" },
     ],
   },
   {

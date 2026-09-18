@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/brief", label: "Daily brief" },
   { href: "/stocks", label: "Stocks" },
   { href: "/track-record", label: "Track record" },
+  { href: "/guides", label: "Guides" },
 ];
 
 export default function Navbar() {

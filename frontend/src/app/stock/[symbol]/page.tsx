@@ -347,6 +347,12 @@ export default async function StockPage({
                 <span className="font-semibold text-navy-900">{stock.trend}</span>
               </p>
             ) : null}
+            <Link
+              href="/guides/how-to-read-a-psx-stock-page"
+              className="mt-3 inline-block text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+            >
+              What these numbers mean
+            </Link>
           </section>
 
           <section className="card p-5">
@@ -408,7 +414,14 @@ export default async function StockPage({
           </p>
           <p className="mt-2 text-sm text-slate-500">
             This is a description of index membership, not a religious ruling. Consult a qualified
-            scholar for guidance on your own circumstances.
+            scholar for guidance on your own circumstances.{" "}
+            <Link
+              href="/guides/how-to-check-if-a-psx-stock-is-halal"
+              className="font-semibold text-emerald-700 hover:text-emerald-800"
+            >
+              How the screen works
+            </Link>
+            .
           </p>
         </section>
 
