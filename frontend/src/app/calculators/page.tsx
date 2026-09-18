@@ -15,6 +15,7 @@ export default function CalculatorsPage() {
     <div className="px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-4xl">
         <SectionHeading
+          as="h1"
           eyebrow="Free tools"
           title="Calculators for PSX investors"
           description="Three calculators for the numbers that come up most often when you invest on the Pakistan Stock Exchange. They are free, they need no account, and everything is worked out in your browser, so nothing you type here is sent to us or stored anywhere."

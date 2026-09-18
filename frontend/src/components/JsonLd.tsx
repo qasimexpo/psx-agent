@@ -1,5 +1,16 @@
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, SOCIAL_LINKS } from "@/lib/site";
+import {
+  CONTACT_EMAIL,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_URL,
+  SOCIAL_LINKS,
+} from "@/lib/site";
 
+/**
+ * The brand entity, emitted on every page. Anything that describes one page
+ * rather than the site (articles, breadcrumbs, the FAQ) belongs on that page,
+ * because Google only accepts structured data that matches the visible text.
+ */
 const structuredData = {
   "@context": "https://schema.org",
   "@graph": [
@@ -11,6 +22,12 @@ const structuredData = {
       logo: `${SITE_URL}/images/logo.jpg`,
       description: SITE_DESCRIPTION,
       areaServed: { "@type": "Country", name: "Pakistan" },
+      contactPoint: {
+        "@type": "ContactPoint",
+        email: CONTACT_EMAIL,
+        contactType: "customer support",
+        availableLanguage: ["en", "ur"],
+      },
       // sameAs is how Google ties the social profiles to this brand.
       ...(SOCIAL_LINKS.length
         ? { sameAs: SOCIAL_LINKS.map((link) => link.href) }
@@ -24,52 +41,6 @@ const structuredData = {
       description: SITE_DESCRIPTION,
       publisher: { "@id": `${SITE_URL}/#organization` },
       inLanguage: "en",
-    },
-    {
-      "@type": "FAQPage",
-      "@id": `${SITE_URL}/#faq`,
-      mainEntity: [
-        {
-          "@type": "Question",
-          name: "How do you decide which PSX stocks are halal?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Shariah status comes from the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. A stock is labelled Shariah compliant only if the exchange lists it as a constituent. The AI is never asked to make that judgement, and it can only choose among stocks that already passed the screen.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Is SmartSarmaya free?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Yes. Portfolio audits, stock analysis, halal picks and the daily market brief are all free, with no account or registration. The site is supported by advertising.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Do you store my portfolio?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "No. Holdings you enter are used to compute the audit in that request and are never written to a database or associated with you.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Where does the market data come from?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Prices, index levels, dividend announcements and corporate calendars come from the Pakistan Stock Exchange data portal. Technical indicators are calculated from five years of exchange closing prices. Data may be delayed.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Is this financial advice?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "No. SmartSarmaya is an educational research tool. Nothing on it is a recommendation to buy or sell, and nothing on it is a religious ruling. Consult a licensed adviser and a qualified scholar for your own circumstances.",
-          },
-        },
-      ],
     },
   ],
 };

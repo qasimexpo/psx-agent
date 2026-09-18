@@ -11,6 +11,16 @@ const nextConfig: NextConfig = {
   // canonical ones instead of serving a second copy.
   async redirects() {
     return [
+      // The canonical host is www. Without this, the apex domain served a
+      // second full copy of the site and search engines had to guess which
+      // one to rank. Vercel can also do this from the Domains settings; the
+      // rule lives here so a fresh deployment behaves the same way.
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "smartsarmaya.com" }],
+        destination: "https://www.smartsarmaya.com/:path*",
+        permanent: true,
+      },
       { source: "/privacy", destination: "/privacy-policy", permanent: true },
       { source: "/terms", destination: "/terms-of-service", permanent: true },
     ];

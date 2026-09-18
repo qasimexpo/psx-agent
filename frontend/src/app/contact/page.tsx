@@ -15,6 +15,7 @@ export default function ContactPage() {
     <div className="px-4 py-12 sm:px-6">
       <div className="mx-auto max-w-3xl">
         <SectionHeading
+          as="h1"
           eyebrow="Get in touch"
           title="Contact"
           description="One email address, read by a person. There is no contact form here because there is no backend to receive one, and we would rather not pretend otherwise."

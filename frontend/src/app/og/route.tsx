@@ -127,8 +127,11 @@ function card(node: React.ReactElement) {
     width: WIDTH,
     height: HEIGHT,
     headers: {
-      // Cards change at most as often as the prices behind them.
-      "cache-control": "public, immutable, no-transform, max-age=900",
+      // Cards change at most as often as the prices behind them. max-age
+      // covers browsers; Vercel's edge only caches on s-maxage, and without
+      // it every crawler fetch paid the full 2-3 s render.
+      "cache-control":
+        "public, no-transform, max-age=900, s-maxage=3600, stale-while-revalidate=86400",
     },
   });
 }
