@@ -83,6 +83,10 @@ export const metadata: Metadata = {
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
+  // AdSense verifies site ownership by finding its script in <head>. The
+  // script now loads lazily, so this tag, Google's documented alternative,
+  // keeps the site verified regardless of how the script is loaded.
+  ...(adsenseClient ? { other: { "google-adsense-account": adsenseClient } } : {}),
 };
 
 export default function RootLayout({
