@@ -32,7 +32,14 @@ export const EDITOR = {
  */
 export const SOCIAL_LINKS: { label: string; href: string }[] = [
   { label: "X", href: process.env.NEXT_PUBLIC_SOCIAL_X ?? "" },
-  { label: "Facebook", href: process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK ?? "" },
+  {
+    label: "Facebook",
+    // Compiled in, like the ad IDs: the Page exists, and an unset variable
+    // would silently drop the one off-site profile the brand has.
+    href:
+      process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK ??
+      "https://www.facebook.com/people/SmartSarmaya/61594631101238/",
+  },
   { label: "Instagram", href: process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM ?? "" },
   { label: "LinkedIn", href: process.env.NEXT_PUBLIC_SOCIAL_LINKEDIN ?? "" },
   { label: "Telegram", href: process.env.NEXT_PUBLIC_SOCIAL_TELEGRAM ?? "" },
