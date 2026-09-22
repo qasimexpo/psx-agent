@@ -3,7 +3,7 @@
     python marketing/social/make_cards.py <output-dir> [SYMBOL ...]
 
 Produces a market card from the latest brief and the home page, one company
-card per symbol, and the three evergreen feature cards. Cards are 1080x1350
+card per symbol, an introduction card, and the three evergreen feature cards. Cards are 1080x1350
 (4:5), the size Facebook and Instagram show largest on a phone. Everything
 on a card is read from smartsarmaya.com at run time, so a card is only ever
 as fresh as the site, and never fresher.
@@ -333,6 +333,40 @@ def halal_card(out: Path, examples: list[dict], counts: tuple[int, int]) -> None
     save(img, out, "feature-is-it-halal.jpg")
 
 
+def intro_card(out: Path, counts: tuple[int, int]) -> None:
+    """Introduction card for groups and first-time readers: what the site does."""
+    img = base(11)
+    d = header(img, "Free research for the Pakistan Stock Exchange")
+    d.text((64, 200), "Halal stock research,", font=bold(76), fill=WHITE)
+    d.text((64, 288), "free, no account.", font=bold(76), fill=MINT)
+    halal, total = counts
+    rows = [
+        ("Is it halal?", f"Every company page answers in its first line, from the KMI All Shares Islamic Index. {halal} of {total} pass."),
+        ("Daily market brief", "Written from exchange data before the open and after the close, every trading day."),
+        ("AI picks, on the record", "Halal picks for ten sectors, marked to market daily. Every pick stays on a public scorecard."),
+        ("Portfolio audit", "Type your holdings; see value, profit and how much of your money is Shariah compliant."),
+    ]
+    y = 410
+    for i, (title, body) in enumerate(rows, 1):
+        panel(img, (64, y, W - 64, y + 168))
+        d = ImageDraw.Draw(img)
+        d.ellipse((92, y + 30, 140, y + 78), fill=EMERALD)
+        d.text((116, y + 54), str(i), font=bold(26), fill=NAVY, anchor="mm")
+        d.text((164, y + 26), title, font=bold(32), fill=WHITE)
+        words, line, ly = body.split(), "", y + 76
+        for w in words:
+            probe = (line + " " + w).strip()
+            if d.textlength(probe, font=reg(24)) > W - 64 - 164 - 26:
+                d.text((164, ly), line, font=reg(24), fill=SLATE2)
+                line, ly = w, ly + 34
+            else:
+                line = probe
+        d.text((164, ly), line, font=reg(24), fill=SLATE2)
+        y += 190
+    footer(img, "smartsarmaya.com", "Educational, not financial advice and not a religious ruling.")
+    save(img, out, "intro-what-it-does.jpg")
+
+
 def audit_card(out: Path) -> None:
     img = base(5)
     d = header(img, "Feature · portfolio audit")
@@ -406,6 +440,7 @@ def main() -> None:
     profit = re.search(r"([\d\.]+%)\s+in profit", home)
     examples = stocks[:2] + [fetch_stock("HBL")]
     halal_card(out, examples, (int(counts.group(1)), int(counts.group(2))) if counts else (0, 0))
+    intro_card(out, (int(counts.group(1)), int(counts.group(2))) if counts else (0, 0))
     audit_card(out)
     record_card(out, tracked.group(1) if tracked else "—", profit.group(1) if profit else "—")
 
