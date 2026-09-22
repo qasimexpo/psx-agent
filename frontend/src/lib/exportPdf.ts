@@ -126,7 +126,7 @@ export async function exportAuditToPdf(
 
   autoTable(pdf, {
     startY: y,
-    head: [["Symbol", "Qty", "Cost", "Live", "P/L", "Weight", "Halal", "Call"]],
+    head: [["Symbol", "Qty", "Cost", "Live", "P/L", "Weight", "Shariah", "Call"]],
     body: data.holdings.map((holding) => [
       holding.symbol,
       String(holding.quantity),

@@ -118,7 +118,7 @@ export default function ContactPage() {
               href="/about"
               className="focus-ring rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600"
             >
-              How the halal screening works
+              How the Shariah screening works
             </Link>
             <Link
               href="/track-record"

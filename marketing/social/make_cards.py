@@ -313,10 +313,11 @@ def stock_card(s: dict, out: Path) -> None:
 def halal_card(out: Path, examples: list[dict], counts: tuple[int, int]) -> None:
     img = base(9)
     d = header(img, "Feature · one-sentence answers")
-    d.text((64, 200), "Is it halal?", font=bold(96), fill=WHITE)
-    d.text((64, 320), "Every company page answers in its first line,", font=reg(30), fill=SLATE2)
-    d.text((64, 362), "sourced from the exchange, not from a chatbot.", font=reg(30), fill=SLATE2)
-    y = 440
+    d.text((64, 200), "Is it Shariah", font=bold(96), fill=WHITE)
+    d.text((64, 310), "compliant?", font=bold(96), fill=MINT)
+    d.text((64, 430), "Every company page answers in its first line,", font=reg(30), fill=SLATE2)
+    d.text((64, 472), "sourced from the exchange, not from a chatbot.", font=reg(30), fill=SLATE2)
+    y = 540
     for s in examples[:3]:
         ok = s["is_kmi"]
         panel(img, (64, y, W - 64, y + 150), fill=GREEN_PANEL if ok else RED_PANEL)
@@ -331,20 +332,20 @@ def halal_card(out: Path, examples: list[dict], counts: tuple[int, int]) -> None
     d.text((64, y), f"{halal} of {total} listed companies pass the screen.", font=bold(30), fill=MINT)
     d.text((64, y + 44), "Search any symbol. Free, no account.", font=reg(28), fill=SLATE2)
     footer(img, "smartsarmaya.com/stocks", "Shariah status reflects index membership, not a religious ruling.")
-    save(img, out, "feature-is-it-halal.jpg")
+    save(img, out, "feature-shariah-status.jpg")
 
 
 def intro_card(out: Path, counts: tuple[int, int]) -> None:
     """Introduction card for groups and first-time readers: what the site does."""
     img = base(11)
     d = header(img, "Free research for the Pakistan Stock Exchange")
-    d.text((64, 200), "Halal stock research,", font=bold(76), fill=WHITE)
+    d.text((64, 200), "PSX stock research,", font=bold(76), fill=WHITE)
     d.text((64, 288), "free, no account.", font=bold(76), fill=MINT)
     halal, total = counts
     rows = [
-        ("Is it halal?", f"Every company page answers in its first line, from the KMI All Shares Islamic Index. {halal} of {total} pass."),
+        ("Is it Shariah compliant?", f"Every company page answers in its first line, from the KMI All Shares Islamic Index. {halal} of {total} pass."),
         ("Daily market brief", "Written from exchange data before the open and after the close, every trading day."),
-        ("AI picks, on the record", "Halal picks for ten sectors, marked to market daily. Every pick stays on a public scorecard."),
+        ("AI picks, on the record", "Shariah-compliant picks for ten sectors, marked to market daily. Every pick stays on a public scorecard."),
         ("Portfolio audit", "Type your holdings; see value, profit and how much of your money is Shariah compliant."),
     ]
     y = 410

@@ -8,7 +8,7 @@
 
 Every week someone launches "AI stock picks" for some market. I launched one for the Pakistan Stock Exchange this month, and the most useful thing I can tell other builders is the list of things I decided the model must never be allowed to do. The product got better each time the list got longer.
 
-Some context. The PSX has about five hundred listed companies. A large share of retail investors want holdings that are Shariah compliant, and the exchange publishes a screened list, the KMI All Shares Islamic Index, that defines exactly which companies qualify. A "halal AI stock picker" is therefore two problems in one: a compliance problem with a known correct answer, and a ranking problem with no correct answer at all. Treating them as one problem is how you build something harmful.
+Some context. The PSX has about five hundred listed companies. A large share of retail investors want holdings that are Shariah compliant, and the exchange publishes a screened list, the KMI All Shares Islamic Index, that defines exactly which companies qualify. A "Shariah-compliant AI stock picker" is therefore two problems in one: a compliance problem with a known correct answer, and a ranking problem with no correct answer at all. Treating them as one problem is how you build something harmful.
 
 ## Rule 1: the model never decides compliance
 

@@ -23,7 +23,7 @@ Every company on the exchange has a page here, built from the same data and laid
 
 **52-week range.** A bar from the lowest to the highest price of the past year, with a marker at today's price. A marker at the far right means the stock is at a yearly high, which is either strength or exhaustion depending on everything else. Near the left, either value or a falling knife. The bar tells you where you are, not which of those it is.
 
-Under the header, one sentence answers the halal question directly, sourced from the index list. The [guide to checking compliance](/guides/how-to-check-if-a-psx-stock-is-halal) covers what that sentence does and does not mean.
+Under the header, one sentence answers the Shariah question directly, sourced from the index list. The [guide to checking compliance](/guides/how-to-check-if-a-psx-stock-is-halal) covers what that sentence does and does not mean.
 
 ## AI analysis
 
@@ -55,7 +55,7 @@ The percentage change over one week, one month, three months and one year, follo
 
 ## Peers and picks
 
-Near the bottom, other companies in the same sector with their day's move, so that "is it just this stock or the whole sector?" can be answered without leaving the page. A link to the [halal picks for that sector](/picks) follows, when the sector has a picks page.
+Near the bottom, other companies in the same sector with their day's move, so that "is it just this stock or the whole sector?" can be answered without leaving the page. A link to the [Shariah-compliant picks for that sector](/picks) follows, when the sector has a picks page.
 
 ## A one-minute reading order
 

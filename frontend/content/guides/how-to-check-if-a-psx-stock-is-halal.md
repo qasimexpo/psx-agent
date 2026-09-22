@@ -1,15 +1,15 @@
 ---
-title: "How to check whether a PSX stock is halal"
+title: "How to check whether a PSX stock is Shariah compliant"
 description: "The Pakistan Stock Exchange publishes its own Shariah-screened list, the KMI All Shares Islamic Index. Here is how the screen works, how to check any company in ten seconds, and what the answer does and does not mean."
 date: 2026-09-18
 updated: 2026-09-18
-keywords: ["halal stocks Pakistan", "Shariah compliant stocks PSX", "KMI All Shares Islamic Index", "is this stock halal", "Islamic investing Pakistan"]
+keywords: ["Shariah-compliant stocks Pakistan", "halal stocks Pakistan", "Shariah compliant stocks PSX", "KMI All Shares Islamic Index", "is this stock halal", "Islamic investing Pakistan"]
 image: /images/guides/halal-screening-flow.svg
 imageAlt: "Six-step flow from the exchange's Shariah-screened list to a recorded pick"
 related: ["kse-100-vs-kmi-30-vs-kmi-all-shares", "how-to-audit-your-psx-portfolio", "how-our-ai-picks-work"]
 ---
 
-Most Pakistani retail investors who care about Shariah compliance find out whether a stock is halal the same way they find out everything else: by asking in a WhatsApp group. Somebody replies "yes bhai, it's fine", nobody says where that came from, and the question is closed.
+Most Pakistani retail investors who care about Shariah compliance find out whether a stock is Shariah compliant (halal) the same way they find out everything else: by asking in a WhatsApp group. Somebody replies "yes bhai, it's fine", nobody says where that came from, and the question is closed.
 
 There is a better source, and it is free. The Pakistan Stock Exchange itself maintains a list of every listed company that passes a Shariah screen, and it publishes that list as an index. If a company is in the index, it passed. If it is not, it did not. This guide explains what the screen checks, how to look a company up, and where the limits of that answer are.
 
@@ -44,7 +44,7 @@ Every company page on this site states the answer in its first sentence, sourced
 
 1. Open the [stock directory](/stocks) or type the symbol into the search box on the home page.
 2. Open the company page. The first line under the price reads either "Yes, PPL is Shariah compliant" or "No, HBL is not Shariah compliant", followed by the reason: whether it is a constituent of the KMI All Shares Islamic Index.
-3. Scroll to the section titled "Is it halal to invest in?" for the same answer with the caveats spelled out.
+3. Scroll to the section titled "Is it Shariah compliant?" for the same answer with the caveats spelled out.
 
 <img src="/images/guides/halal-answer.png" width="1200" height="63" alt="The first line of a company page: Yes, PPL is Shariah compliant, followed by the index it belongs to" loading="lazy">
 
@@ -56,13 +56,13 @@ To check several holdings together, the [portfolio audit](/#audit) does it in on
 
 ## How this site uses the list
 
-It is worth being precise about what happens here, because "AI" and "halal" in the same sentence should make anyone cautious.
+It is worth being precise about what happens here, because "AI" and "Shariah compliant" in the same sentence should make anyone cautious.
 
 <img src="/images/guides/halal-screening-flow.svg" width="1200" height="420" alt="Six steps: the exchange publishes the KMI All Shares list; candidates are cut to constituents; prices and technicals are attached; the AI ranks and explains; invented tickers are discarded; every pick is recorded and tracked" loading="lazy">
 
 *The AI is step four. The Shariah decision is step one, and it belongs to the exchange.*
 
-The language model on this site is never asked whether a company is halal. Before it sees a single name, the candidate list is filtered to KMI All Shares constituents. It ranks and explains stocks that have already passed the screen, and any symbol it produces that was not on the supplied list is thrown away before it is saved. The full process is described in [how our AI picks work](/guides/how-our-ai-picks-work).
+The language model on this site is never asked whether a company is Shariah compliant. Before it sees a single name, the candidate list is filtered to KMI All Shares constituents. It ranks and explains stocks that have already passed the screen, and any symbol it produces that was not on the supplied list is thrown away before it is saved. The full process is described in [how our AI picks work](/guides/how-our-ai-picks-work).
 
 ## What the answer does not tell you
 
@@ -76,7 +76,7 @@ Three honest limits.
 
 ## Quick reference
 
-- **Halal by the exchange's definition:** listed in the KMI All Shares Islamic Index.
+- **Shariah compliant by the exchange's definition:** listed in the KMI All Shares Islamic Index.
 - **Where to check:** the first sentence of any [company page](/stocks), or the "Shariah compliant only" filter on the directory.
 - **How often it changes:** at each index review, normally semi-annual.
 - **What a large index tells you:** nothing. The [KSE-100 is a size index](/guides/kse-100-vs-kmi-30-vs-kmi-all-shares) and includes conventional banks.

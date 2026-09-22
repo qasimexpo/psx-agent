@@ -14,13 +14,13 @@
   <!-- All listed -->
   <rect x="60" y="60" width="760" height="440" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
   <text class="k" x="84" y="94" fill="#64748b">ALL PSX LISTED COMPANIES · 500+</text>
-  <text class="s" x="84" y="116">Every share that trades on the exchange, halal or not.</text>
+  <text class="s" x="84" y="116">Every share that trades on the exchange, Shariah compliant or not.</text>
 
   <!-- KMI All Shares -->
   <rect x="100" y="150" width="520" height="320" rx="20" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
   <text class="k" x="124" y="184" fill="#047857">KMI ALL SHARES ISLAMIC INDEX · ~300</text>
   <text class="s" x="124" y="206">Every company that passes the exchange's</text>
-  <text class="s" x="124" y="224">Shariah screens. This is the halal list.</text>
+  <text class="s" x="124" y="224">Shariah screens. This is the Shariah-compliant list.</text>
 
   <!-- KMI-30 -->
   <rect x="140" y="270" width="300" height="160" rx="16" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
@@ -35,7 +35,7 @@
   <text class="s" x="444" y="298">The 100 largest companies by</text>
   <text class="s" x="444" y="316">free-float market value, chosen</text>
   <text class="s" x="444" y="334">by size, not by Shariah status.</text>
-  <text class="s" x="444" y="372">Inside the green: halal KSE-100 names</text>
+  <text class="s" x="444" y="372">Inside the green: Shariah-compliant KSE-100 names</text>
   <text class="s" x="444" y="390">(e.g. Lucky Cement, Engro Fertilizers).</text>
   <text class="s" x="444" y="420">Outside it: conventional banks and</text>
   <text class="s" x="444" y="438">others that fail a screen.</text>
@@ -50,10 +50,10 @@
     <rect x="0" y="120" width="18" height="18" rx="4" fill="#eef2ff" stroke="#6366f1" stroke-width="2" stroke-dasharray="4 3"/>
     <text class="l" x="28" y="134">Dashed = size based</text>
     <text class="s" x="28" y="154">The KSE-100 tells you a company is</text>
-    <text class="s" x="28" y="172">big, not that it is halal.</text>
+    <text class="s" x="28" y="172">big, not that it is Shariah compliant.</text>
     <text class="l" x="0" y="216">What this means in practice</text>
-    <text class="s" x="0" y="240">• A KSE-100 stock can be haram.</text>
-    <text class="s" x="0" y="262">• A small-cap can be halal.</text>
+    <text class="s" x="0" y="240">• A KSE-100 stock can be non-compliant.</text>
+    <text class="s" x="0" y="262">• A small-cap can be Shariah compliant.</text>
     <text class="s" x="0" y="284">• Check the green list, not the</text>
     <text class="s" x="12" y="302">index headline.</text>
     <text class="s" x="0" y="340" fill="#64748b">Counts are approximate and change</text>

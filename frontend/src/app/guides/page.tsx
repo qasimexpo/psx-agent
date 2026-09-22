@@ -7,7 +7,7 @@ import { shortDate } from "@/lib/format";
 import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Guides to halal investing on the PSX",
+  title: "Guides to Shariah-compliant investing on the PSX",
   description:
     "Plain-language guides to the Pakistan Stock Exchange: how Shariah screening works, what the indices mean, how to read a stock page, and how to use every tool on this site.",
   alternates: { canonical: "/guides" },
@@ -38,7 +38,7 @@ export default async function GuidesPage() {
         <SectionHeading
           as="h1"
           eyebrow="Guides"
-          title="Halal investing on the PSX, explained"
+          title="Shariah-compliant investing on the PSX, explained"
           description="Short, specific answers to the questions people ask before they buy a Pakistani stock: how the Shariah screen works, what the indices mean, and how to read the numbers on a company page."
         />
 

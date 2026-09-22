@@ -53,7 +53,7 @@ Three places on this site.
 
 **The company page.** Under the Performance card, **Upcoming** lists any announced payout with its book closure dates, and any scheduled meeting. The [stock page guide](/guides/how-to-read-a-psx-stock-page) shows where it sits. A line such as "payout 60% (F) (D), book closure 2026-10-21" reads as a 60 percent final (F) cash dividend (D) with book closure from 21 October.
 
-**The home page.** The [dividends and corporate actions](/#events) section collects the next few weeks of book closures across the market, with a halal badge on each compliant company, next to the calendar of shareholder meetings.
+**The home page.** The [dividends and corporate actions](/#events) section collects the next few weeks of book closures across the market, with a Shariah badge on each compliant company, next to the calendar of shareholder meetings.
 
 **The daily brief.** The [closing brief](/brief) mentions notable announcements of the day, and the [guide to reading it](/guides/how-to-read-the-daily-brief) explains where.
 

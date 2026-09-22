@@ -21,7 +21,7 @@ Both are written by a language model from the exchange's own data, then publishe
 
 **Headline and summary.** The index move and the one thing that explains it, in a sentence and a paragraph. If you read nothing else, read these. They are written to be understood without the rest of the page.
 
-**KSE-100 close and session move.** The index level and its change for the session. The [index guide](/guides/kse-100-vs-kmi-30-vs-kmi-all-shares) explains why this number and the halal universe can move in different directions on the same day.
+**KSE-100 close and session move.** The index level and its change for the session. The [index guide](/guides/kse-100-vs-kmi-30-vs-kmi-all-shares) explains why this number and the Shariah-compliant universe can move in different directions on the same day.
 
 **What matters.** Five points, in order of importance: the index, which sectors led, the biggest movers with their volumes, what happened to Shariah-compliant names, and any corporate actions worth knowing about. This list is the brief's spine; the body below expands it.
 

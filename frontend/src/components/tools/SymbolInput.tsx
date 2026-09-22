@@ -130,7 +130,7 @@ export default function SymbolInput({
                   <span className="ml-2 truncate text-xs text-slate-500">{item.name}</span>
                 </span>
                 {item.is_kmi ? (
-                  <span className="badge badge-halal shrink-0">Halal</span>
+                  <span className="badge badge-halal shrink-0">Compliant</span>
                 ) : null}
               </button>
             </li>

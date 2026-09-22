@@ -7,7 +7,7 @@ name: SmartSarmaya pipeline
 #
 #   04:00-11:00 UTC  =  09:00-16:00 PKT   market hours
 #   03:45 UTC        =  08:45 PKT         morning brief, before the open
-#   04:15 UTC        =  09:15 PKT         daily halal picks
+#   04:15 UTC        =  09:15 PKT         daily Shariah-compliant picks
 #   11:15 UTC        =  16:15 PKT         closing brief
 #   12:00 UTC        =  17:00 PKT         technicals from end-of-day data
 #   13:00 UTC        =  18:00 PKT         monitor, after every weekday job
@@ -20,7 +20,7 @@ on:
     - cron: "0,30 4-11 * * 1-5"   # market: quotes, movers, index
     - cron: "0 3 * * *"           # events: dividends, meetings, news
     - cron: "45 3 * * 1-5"        # brief: morning edition
-    - cron: "15 4 * * 1-5"        # picks: Top Halal Picks
+    - cron: "15 4 * * 1-5"        # picks: Top Shariah-compliant picks
     - cron: "15 11 * * 1-5"       # brief: closing edition
     - cron: "0 12 * * 1-5"        # technicals: end-of-day indicators
     - cron: "30 12 * * 1-5"       # scorecard: mark open picks to market

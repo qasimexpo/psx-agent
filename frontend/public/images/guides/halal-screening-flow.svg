@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="t d">
-  <title id="t">How a halal pick is produced on SmartSarmaya</title>
+  <title id="t">How a Shariah-compliant pick is produced on SmartSarmaya</title>
   <desc id="d">Six steps from the exchange's KMI All Shares Islamic Index list to a recorded, tracked pick. The AI ranks and explains only after the exchange has decided which stocks are Shariah compliant.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -26,7 +26,7 @@
     <text class="h" x="20" y="68">KMI All Shares Islamic Index</text>
     <text class="s" x="20" y="92">The exchange publishes which listed</text>
     <text class="s" x="20" y="112">companies pass its Shariah screens.</text>
-    <text class="s" x="20" y="132">This is the only source of halal status.</text>
+    <text class="s" x="20" y="132">This is the only source of Shariah status.</text>
   </g>
   <g transform="translate(430,40)">
     <rect class="box" width="340" height="140" rx="14"/>
@@ -55,7 +55,7 @@
     <text class="h" x="20" y="68">Ranks and explains</text>
     <text class="s" x="20" y="92">Chooses among the screened list and</text>
     <text class="s" x="20" y="112">writes the reasoning. It is never asked</text>
-    <text class="s" x="20" y="132">whether a company is halal.</text>
+    <text class="s" x="20" y="132">whether a company is Shariah compliant.</text>
   </g>
   <g transform="translate(430,240)">
     <rect class="box" width="340" height="140" rx="14"/>

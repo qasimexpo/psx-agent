@@ -139,7 +139,7 @@ function card(node: React.ReactElement) {
 function fallbackCard() {
   return card(
     <Frame
-      eyebrow="Halal AI research for the Pakistan Stock Exchange"
+      eyebrow="Shariah-compliant AI research for the Pakistan Stock Exchange"
       footer="Free. No account. Not financial advice."
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -151,7 +151,7 @@ function fallbackCard() {
             lineHeight: 1.1,
           }}
         >
-          Halal stock picks, screened by the exchange
+          Shariah-compliant picks, screened by the exchange
         </div>
         <div style={{ fontSize: 28, color: SLATE, display: "flex" }}>
           Every Shariah label comes from the KMI All Shares Islamic Index, not
@@ -268,7 +268,7 @@ async function picksCard(slug: string) {
   const { picks } = await getTopPicks("daily", sector.name, 3);
   return card(
     <Frame
-      eyebrow="Top halal picks"
+      eyebrow="Top Shariah-compliant picks"
       footer="Screened against the KMI All Shares Islamic Index"
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>

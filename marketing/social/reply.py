@@ -3,7 +3,7 @@
     python marketing/social/reply.py OGDC LUCK MARI
 
 Prints, for each symbol, a short English and a Roman Urdu comment built
-from the live company page: halal status, latest price and change, trend,
+from the live company page: Shariah status, latest price and change, trend,
 RSI, the next corporate action if any, and the page link. Nothing is
 posted; Facebook removed group posting from its API, so the comment is
 pasted by hand from a personal profile.

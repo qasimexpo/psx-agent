@@ -39,7 +39,7 @@ Keep them short. Editors read the first two lines.
 
 ### LinkedIn post to accompany the builder article
 
-> I launched an AI stock picker for the PSX this month. The most useful design decision was the list of things the model is *not allowed* to do: decide what's halal, produce a price, or keep a pick it invented.
+> I launched an AI stock picker for the PSX this month. The most useful design decision was the list of things the model is *not allowed* to do: decide what is Shariah compliant, produce a price, or keep a pick it invented.
 >
 > Six rules, one public track record (currently unflattering, published anyway), and why "the AI wrote it" is not an acceptable byline for anything touching money.
 >
