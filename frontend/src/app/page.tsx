@@ -6,6 +6,7 @@ import { EventsSection, NewsSection } from "@/components/events/EventsAndNews";
 import { IndexCard, Ticker } from "@/components/market/MarketStrip";
 import Movers from "@/components/market/Movers";
 import PicksSection, { type PicksBundle } from "@/components/picks/PicksSection";
+import NewsletterSignup from "@/components/tools/NewsletterSignup";
 import PortfolioAudit from "@/components/tools/PortfolioAudit";
 import StockAnalyzer from "@/components/tools/StockAnalyzer";
 import { Disclaimer } from "@/components/ui/Primitives";
@@ -167,6 +168,23 @@ export default async function Page() {
       <EventsSection payouts={payouts} events={events} />
 
       <NewsSection pakistan={pakistanNews} global={globalNews} />
+
+      <section className="px-4 py-12 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="card flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+            <div className="max-w-md">
+              <h2 className="text-xl font-bold tracking-tight text-navy-900">
+                The brief, in your inbox
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                The market brief and the week&apos;s book closures, once per trading day.
+                Written from exchange data, same as the site.
+              </p>
+            </div>
+            <NewsletterSignup source="home" compact className="w-full sm:max-w-sm" />
+          </div>
+        </div>
+      </section>
 
       <section className="px-4 pb-10 sm:px-6">
         <div className="mx-auto max-w-6xl space-y-4">

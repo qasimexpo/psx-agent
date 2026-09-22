@@ -128,3 +128,8 @@ export async function searchSymbols(term: string): Promise<Suggestion[]> {
     return [];
   }
 }
+
+export async function subscribeToNewsletter(email: string, source: string): Promise<string> {
+  const data = await postJson<{ message?: string }>("/api/subscribe", { email, source });
+  return data.message ?? "You are on the list.";
+}

@@ -271,6 +271,30 @@ class StockNote(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
+class Subscriber(Base):
+    """A newsletter signup.
+
+    The only table a visitor's action writes to, so it holds the evidence of
+    consent as well as the address: when they asked, which page they asked
+    from, and when they confirmed. `confirm_token` is the single secret that
+    proves ownership of the address; it is also what an unsubscribe link
+    carries, so it is never shown on a page and never reused after the row is
+    unsubscribed. A row is kept after unsubscribing rather than deleted, so a
+    later send cannot resurrect an address someone has already refused.
+    """
+
+    __tablename__ = "subscribers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), default="")
+    confirm_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
 # --------------------------------------------------------------------------
 # engine
 # --------------------------------------------------------------------------
@@ -332,6 +356,9 @@ _INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS ix_payouts_bc ON payouts (book_closure_from)",
     "CREATE INDEX IF NOT EXISTS ix_events_date ON corporate_events (event_date)",
     "CREATE INDEX IF NOT EXISTS ix_briefs_recent ON daily_briefs (brief_date DESC, session)",
+    # The two lookups a send does: who is due an email, and whose token is this.
+    "CREATE INDEX IF NOT EXISTS ix_subscribers_active ON subscribers (confirmed_at, unsubscribed_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_subscribers_token ON subscribers (confirm_token)",
 )
 
 

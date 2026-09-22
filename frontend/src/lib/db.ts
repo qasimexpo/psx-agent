@@ -4,19 +4,24 @@ import { neon } from "@neondatabase/serverless";
 import { Pool } from "pg";
 
 /**
- * Read-only access to the database the Python pipeline writes.
+ * Access to the database the Python pipeline writes.
  *
  * Server components call these directly, so a page view is one indexed SELECT
  * with no API server in between. Every function degrades to an empty result
  * when DATABASE_URL is absent, which keeps `next build` working in CI and on a
  * fresh clone.
  *
+ * Reads are the norm here; `mutate` is the one exception, because a newsletter
+ * signup is a visitor action and the pipeline is not in the request path for
+ * it. Unlike `query`, it propagates failures, since a signup that silently
+ * does nothing is worse than an error the caller can report.
+ *
  * Two drivers are supported. A Neon host uses their HTTP driver, which is what
  * production runs on. Any other Postgres host uses node-postgres, so the site
  * can be run locally against a plain Postgres instance without a Neon account.
  */
 
-const connectionString = process.env.DATABASE_URL ?? "";
+const connectionString = (process.env.DATABASE_URL ?? "").trim();
 const isNeonHost = /\.neon\.(tech|build)/.test(connectionString);
 
 type Row = Record<string, unknown>;
@@ -97,6 +102,20 @@ async function query<T = Row>(
     }
   }
   return [];
+}
+
+/**
+ * A statement that changes data. Throws when the database is absent or the
+ * statement fails, so the caller decides what the visitor is told.
+ */
+export async function mutate<T = Row>(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): Promise<T[]> {
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not configured");
+  }
+  return runQuery<T>(strings, values);
 }
 
 // ---------------------------------------------------------------------------

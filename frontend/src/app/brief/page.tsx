@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Newspaper } from "lucide-react";
 import { listBriefs } from "@/lib/db";
 import { changeClass, longDate, money, percent } from "@/lib/format";
+import NewsletterSignup from "@/components/tools/NewsletterSignup";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
 import { briefPath } from "@/lib/briefs";
 
@@ -79,6 +80,10 @@ export default async function BriefIndexPage() {
             description="Briefs appear once the pipeline has run. The morning edition publishes at 08:45 and the closing edition at 16:15, Pakistan time."
           />
         )}
+
+        <div className="card mt-10 p-6">
+          <NewsletterSignup source="brief" />
+        </div>
 
         <Disclaimer className="mt-8" />
       </div>
