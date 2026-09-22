@@ -3,10 +3,11 @@
     python marketing/social/make_cards.py <output-dir> [SYMBOL ...]
 
 Produces a market card from the latest brief and the home page, one company
-card per symbol, an introduction card, and the three evergreen feature cards. Cards are 1080x1350
-(4:5), the size Facebook and Instagram show largest on a phone. Everything
-on a card is read from smartsarmaya.com at run time, so a card is only ever
-as fresh as the site, and never fresher.
+card per symbol, an introduction card, a dividend-calculator card for the
+first symbol with a declared payout, and the three evergreen feature cards.
+Cards are 1080x1350 (4:5), the size Facebook and Instagram show largest on
+a phone. Everything on a card is read from smartsarmaya.com at run time, so
+a card is only ever as fresh as the site, and never fresher.
 
 Needs Pillow, requests and beautifulsoup4:  pip install pillow requests bs4
 """
@@ -367,6 +368,35 @@ def intro_card(out: Path, counts: tuple[int, int]) -> None:
     save(img, out, "intro-what-it-does.jpg")
 
 
+def dividend_card(out: Path, sym: str, price: float, dps: float, pct: int, shares: int) -> None:
+    """Worked example of the dividend calculator: what a declared payout actually pays."""
+    gross = dps * shares
+    wht = gross * 0.15
+    img = base(13)
+    d = header(img, "Feature · dividend calculator")
+    d.text((64, 200), f"{sym} declared a {pct}%", font=bold(72), fill=WHITE)
+    d.text((64, 282), "dividend. What do", font=bold(72), fill=WHITE)
+    d.text((64, 364), "you actually get?", font=bold(72), fill=MINT)
+    d.text((64, 480), f"{pct}% of the Rs 10 par value = Rs {dps:g} per share, not {pct}% of the price.", font=reg(26), fill=SLATE2)
+    rows = [
+        (f"{shares:,} shares × Rs {dps:g}", f"Rs {gross:,.0f}", "gross dividend", WHITE),
+        ("Withholding tax, filer 15%", f"− Rs {wht:,.0f}", "30% if you are not on the ATL", ROSE),
+        ("Paid into your account", f"Rs {gross - wht:,.0f}", "net dividend", MINT),
+        (f"Yield at Rs {price:,.2f}", f"{dps / price * 100:.1f}%", "gross, on the current price", WHITE),
+    ]
+    y = 550
+    for label, value, note, col in rows:
+        panel(img, (64, y, W - 64, y + 122))
+        d = ImageDraw.Draw(img)
+        d.text((92, y + 22), label, font=med(26), fill=SLATE2)
+        d.text((92, y + 62), note, font=reg(22), fill=SLATE)
+        d.text((W - 92, y + 40), value, font=bold(40), fill=col, anchor="rm")
+        y += 138
+    d.text((64, y + 20), "Hold the shares before the book-closure date to receive it.", font=reg(26), fill=SLATE2)
+    footer(img, "smartsarmaya.com/calculators", "Filer/non-filer rates as described on the page. Educational, not tax advice.")
+    save(img, out, f"feature-dividend-{sym}.jpg")
+
+
 def audit_card(out: Path) -> None:
     img = base(5)
     d = header(img, "Feature · portfolio audit")
@@ -441,6 +471,12 @@ def main() -> None:
     examples = stocks[:2] + [fetch_stock("HBL")]
     halal_card(out, examples, (int(counts.group(1)), int(counts.group(2))) if counts else (0, 0))
     intro_card(out, (int(counts.group(1)), int(counts.group(2))) if counts else (0, 0))
+    for s in stocks:  # dividend card for the first symbol with a declared payout
+        payout = next((re.search(r"payout (\d+)%", u) for u in s["upcoming"] if u.startswith("payout")), None)
+        if payout:
+            pct = int(payout.group(1))
+            dividend_card(out, s["sym"], float(s["price"].replace(",", "")), pct / 10, pct, 400)
+            break
     audit_card(out)
     record_card(out, tracked.group(1) if tracked else "—", profit.group(1) if profit else "—")
 
