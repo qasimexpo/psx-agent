@@ -26,11 +26,13 @@ export default function PrivacyPolicyPage() {
         <div className="card p-5 sm:p-6">
           <h2 className="text-base font-bold text-navy-900">The short version</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-700">
-            SmartSarmaya has no accounts, no login and no registration, so we hold no name, email
-            address, phone number or password for you. Portfolio holdings you type into the audit
-            tool are used to answer that one request and are never written to our database. What
-            does happen is ordinary web hosting: our server keeps short lived request logs, and
-            Google Analytics and Google AdSense run on the site and set their own cookies.
+            SmartSarmaya has no accounts, no login and no registration, so we hold no name,
+            phone number or password for you. The one piece of personal data we store is an email
+            address, and only if you ask for the newsletter; you can remove it in one click.
+            Portfolio holdings you type into the audit tool are used to answer that one request
+            and are never written to our database. What does happen is ordinary web hosting: our
+            server keeps short lived request logs, and Google Analytics and Google AdSense run on
+            the site and set their own cookies.
           </p>
         </div>
 
@@ -55,7 +57,9 @@ export default function PrivacyPolicyPage() {
           <ul className="mt-3 space-y-2.5 text-sm leading-relaxed text-slate-700">
             <li>
               <strong className="text-navy-900">No accounts.</strong> There is no sign up, no
-              login and no password, so there is no user profile to store, breach or sell.
+              login and no password, so there is no user profile to store, breach or sell. The
+              newsletter is the one place an email address is stored, it is optional, and it gives
+              you nothing to log in to; see section 3.
             </li>
             <li>
               <strong className="text-navy-900">No stored portfolios.</strong> When you enter
@@ -97,6 +101,16 @@ export default function PrivacyPolicyPage() {
             <li>
               <strong className="text-navy-900">Advertising signals.</strong> Google AdSense
               collects the information it needs to serve and measure ads. See section 5.
+            </li>
+            <li>
+              <strong className="text-navy-900">Your email address, if you subscribe.</strong> The
+              newsletter signup stores the address you type, the page you signed up from and the
+              time you did it. The page and time are the record that you asked for the emails. We
+              use the address for nothing but sending the newsletter: it is never sold, shared or
+              passed to an advertiser. Every email carries a one-click unsubscribe link, and you
+              can also write to us to be removed. When you unsubscribe we keep the address on a
+              suppression record rather than deleting it, so that a later send cannot accidentally
+              email you again; say so in your message if you would rather it were erased outright.
             </li>
             <li>
               <strong className="text-navy-900">Anything you email us.</strong> If you write to us,
