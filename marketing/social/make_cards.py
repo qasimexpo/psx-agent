@@ -64,8 +64,21 @@ def soup(path: str) -> BeautifulSoup:
     return BeautifulSoup(requests.get(SITE + path, headers=UA, timeout=30).text, "html.parser")
 
 
+#: Typographic characters the model writes that DM Sans has no glyph for, and
+#: which therefore draw as an empty box. Mapped to their ASCII equivalents.
+ASCII_MAP = str.maketrans({
+    "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-",
+    "‘": "'", "’": "'", "“": '"', "”": '"',
+    " ": " ", " ": " ", " ": " ", " ": " ",
+})
+
+
+def plain(s: str) -> str:
+    return re.sub(r"\s+", " ", s.translate(ASCII_MAP)).strip()
+
+
 def text(el) -> str:
-    return el.get_text(" ", strip=True) if el else ""
+    return plain(el.get_text(" ", strip=True)) if el else ""
 
 
 def fetch_market() -> dict:
@@ -81,30 +94,97 @@ def fetch_market() -> dict:
     )
     body = " ".join(text(p) for p in brief.select(".brief-body p"))
     points = [text(li) for li in brief.select("ul li") if len(text(li)) > 40][:5]
-    gainers = re.findall(r"([A-Z]{2,7})\s*\(\+([\d\.]+)%\)", body)[:3]
-    losers = re.findall(r"([A-Z]{2,7})\s+(?:fell|dropped|slipped|lost|declined)\s+([\d\.]+)%", body)
-    pair = re.search(r"([A-Z]{2,7}) and ([A-Z]{2,7}) (?:fell|dropped|slipped|lost|declined) ([\d\.]+)% and ([\d\.]+)%", body)
+    prose = body + " " + " ".join(points)
+    # "FNEL (+14.55%)" and "TISL surged 22.85%" are both how the model names a gainer.
+    gainers = re.findall(r"([A-Z]{2,7})\s*\(\+([\d\.]+)%\)", prose)
+    gainers += re.findall(r"([A-Z]{2,7})\s+(?:surged|jumped|rose|gained|climbed|advanced)\s+([\d\.]+)%", prose)
+    gainers = list(dict.fromkeys((s, p) for s, p in gainers))
+    gainers.sort(key=lambda g: float(g[1]), reverse=True)
+    gainers = gainers[:3]
+    losers = re.findall(r"([A-Z]{2,7})\s+(?:fell|dropped|slipped|lost|declined)\s+([\d\.]+)%", prose)
+    pair = re.search(r"([A-Z]{2,7}) and ([A-Z]{2,7}) (?:fell|dropped|slipped|lost|declined) ([\d\.]+)% and ([\d\.]+)%", prose)
     if pair:
         losers += [(pair.group(1), pair.group(3)), (pair.group(2), pair.group(4))]
     losers = list(dict(losers).items())[:3]
-    breadth = re.findall(r"([A-Z][A-Za-z&\s]+?)\s+(?:posted|shows?|leads breadth with|led with)?\s*(\d+)\s+up\s+(?:vs|against|and)\s+(\d+)\s+down", body + " " + " ".join(points))[:3]
-    active = re.search(r"most active (?:share|security|stock)\s+was\s+([A-Z]{2,7})\s*,?\s*(up|down|rising|falling|gaining|losing)?\s*([-\d\.]+%)?[^\d]*?([\d,]{6,})", body, re.I)
+    # The model varies its wording day to day: "12 up vs 3 down", "18 advances
+    # versus 12 declines", "posted"/"recorded"/"leads breadth with".
+    breadth = re.findall(
+        r"([A-Z][A-Za-z&/\s]+?)\s+(?:posted|recorded|shows?|leads breadth with|led with)?\s*"
+        r"(\d+)\s+(?:up|advances|advancing)\s+(?:vs\.?|versus|against|and|to)\s+(\d+)\s+(?:down|declines|declining)",
+        prose,
+    )[:3]
+    active = re.search(
+        r"most active (?:share|security|stock)\s+was\s+([A-Z]{2,7})\s*,?\s*(up|down|rising|falling|gaining|losing)?\s*([-\d\.]+%)?[^\d]*?([\d,]{6,})",
+        prose, re.I,
+    )
+    if active:
+        vol = active.group(4)
+        active_tuple = (
+            active.group(1),
+            (("+" if (active.group(2) or "").lower() in ("up", "rising", "gaining") else "-") + active.group(3).lstrip("+-−")) if active.group(3) else "",
+            f"{int(vol.replace(',', '')) / 1e6:.1f}M shares",
+        )
+    else:
+        # "TISL surged 22.85% to PKR 5.00, the most active share with over 119 m shares traded"
+        alt = re.search(
+            r"([A-Z]{2,7})\s+(?:surged|jumped|rose|gained|climbed|advanced)\s+([\d\.]+)%.{0,80}?"
+            r"most active share with (?:over\s+)?([\d\.]+)\s*m(?:illion)?\s+shares",
+            prose, re.I | re.S,
+        )
+        active_tuple = (alt.group(1), f"+{alt.group(2)}%", f"{float(alt.group(3)):.1f}M shares") if alt else None
     return {
         "index": m.group(1) if m else "",
         "index_change": (m.group(2), m.group(3)) if m else ("", ""),
-        "headline": article["headline"],
+        "headline": plain(article["headline"]),
         "session": "morning" if link.endswith("/morning") else "closing",
         "url": link,
         "points": points,
         "gainers": [(s, f"+{p}%") for s, p in gainers],
         "losers": [(s, f"−{p}%") for s, p in losers],
-        "breadth": list({n.strip(): (n.strip(), int(u), int(d)) for n, u, d in breadth}.values())[:3],
-        "active": (
-            active.group(1),
-            (("+" if (active.group(2) or "").lower() in ("up", "rising", "gaining") else "−") + active.group(3).lstrip("+-−")) if active and active.group(3) else "",
-            active.group(4),
-        ) if active else None,
+        "breadth": list({(int(u), int(d)): (n.strip(), int(u), int(d)) for n, u, d in breadth}.values())[:3],
+        "active": active_tuple,
     }
+
+
+def fetch_events(limit: int = 6) -> list[dict]:
+    """Upcoming book closures from the home page, which mirrors the PSX data portal.
+
+    The AI brief occasionally mislabels a payout type; this table comes
+    straight from the exchange feed, so a card built from it is safe.
+    """
+    s = soup("/")
+    section = s.find(id="events")
+    rows = []
+    for tr in section.select("table")[0].select("tbody tr"):
+        cells = [text(td) for td in tr.select("td,th")]
+        if len(cells) < 3:
+            continue
+        sym, _, name = cells[0].partition(" ")
+        rows.append({"sym": sym, "name": name, "payout": cells[1], "closure": cells[2]})
+        if len(rows) == limit:
+            break
+    meetings = []
+    if len(section.select("table")) > 1:
+        for tr in section.select("table")[1].select("tbody tr"):
+            cells = [text(td) for td in tr.select("td,th")]
+            if len(cells) >= 3:
+                meetings.append({"sym": cells[0].split(" ")[0], "type": cells[1], "date": cells[2]})
+    return [{"closures": rows, "meetings": meetings[:4]}][0]
+
+
+def payout_words(raw: str) -> tuple[str, str]:
+    """'470%(F) (D)' -> ('470%', 'final dividend')."""
+    pct = re.match(r"([\d.]+%)", raw.replace(" ", ""))
+    kind = raw.upper()
+    if "(B)" in kind:
+        word = "bonus shares"
+    elif "(R)" in kind:
+        word = "right shares"
+    elif "(I)" in kind:
+        word = "interim dividend"
+    else:
+        word = "final dividend"
+    return (pct.group(1) if pct else raw), word
 
 
 def fetch_stock(sym: str) -> dict:
@@ -188,6 +268,20 @@ def tone(s: str):
     return MINT if s.startswith("+") else ROSE if s.startswith(("-", "−")) else SLATE2
 
 
+def wrap(d: ImageDraw.ImageDraw, s: str, x: int, y: int, width: int, fnt, fill, line_h: int) -> int:
+    """Draw `s` wrapped to `width`. Returns the y of the last line drawn."""
+    line = ""
+    for word in s.split():
+        probe = f"{line} {word}".strip()
+        if d.textlength(probe, font=fnt) > width and line:
+            d.text((x, y), line, font=fnt, fill=fill)
+            line, y = word, y + line_h
+        else:
+            line = probe
+    d.text((x, y), line, font=fnt, fill=fill)
+    return y
+
+
 def save(img: Image.Image, out: Path, name: str) -> None:
     img.convert("RGB").save(out / name, quality=92, optimize=True)
     print(name, os.path.getsize(out / name) // 1024, "KB")
@@ -205,16 +299,27 @@ def market_card(m: dict, out: Path, day: date) -> None:
         d = ImageDraw.Draw(img)
         tri = [(86, 414), (100, 394), (114, 414)] if not pct.startswith("-") else [(86, 394), (100, 414), (114, 394)]
         d.polygon(tri, fill=tone(pct))
-    y = 460
-    d.text((64, y), m["headline"][:60] + ("…" if len(m["headline"]) > 60 else ""), font=med(26), fill=SLATE2)
-    y = 510
-    for name, up, down in m["breadth"]:
-        panel(img, (64, y, W - 64, y + 78))
-        d = ImageDraw.Draw(img)
-        d.text((92, y + 22), name[:34], font=med(28), fill=WHITE)
-        s = f"{up} up · {down} down"
-        d.text((W - 92 - d.textlength(s, font=bold(28)), y + 22), s, font=bold(28), fill=MINT if up >= down else ROSE)
-        y += 92
+        # The index strip is the latest reading; the headline below was written
+        # at the session it belongs to, so the two percentages can differ.
+        d.text((64 + w + 16, 396), "latest reading", font=reg(22), fill=SLATE)
+    y = 456
+    y = wrap(d, m["headline"], 64, y, W - 128, med(28), SLATE2, 40) + 60
+    if m["breadth"]:
+        for name, up, down in m["breadth"]:
+            panel(img, (64, y, W - 64, y + 78))
+            d = ImageDraw.Draw(img)
+            d.text((92, y + 22), name[:34], font=med(28), fill=WHITE)
+            s = f"{up} up · {down} down"
+            d.text((W - 92 - d.textlength(s, font=bold(28)), y + 22), s, font=bold(28), fill=MINT if up >= down else ROSE)
+            y += 92
+    else:
+        # Some briefs give breadth only in prose. Rather than leave a gap, carry
+        # the session's own "what matters" lines.
+        d.text((64, y), "What matters", font=med(26), fill=SLATE)
+        y += 44
+        for point in m["points"][:3]:
+            d.ellipse((72, y + 12, 86, y + 26), fill=EMERALD)
+            y = wrap(d, point, 108, y, W - 108 - 64, reg(25), SLATE2, 36) + 16
     y += 18
     d.text((64, y), "Movers", font=med(30), fill=SLATE2)
     y += 46
@@ -231,12 +336,22 @@ def market_card(m: dict, out: Path, day: date) -> None:
             d.text((x + cw - 26 - d.textlength(pct, font=bold(26)), yy), pct, font=bold(26), fill=col)
     y += 214
     if m["active"]:
-        sym, pct, vol = m["active"]
+        sym, pct, shares = m["active"]
         panel(img, (64, y, W - 64, y + 84))
         d = ImageDraw.Draw(img)
         d.text((92, y + 16), "Most active", font=med(22), fill=SLATE)
-        shares = f"{int(vol.replace(',', '')) / 1e6:.1f}M shares"
         d.text((92, y + 44), f"{sym}  {pct}  ·  {shares}", font=bold(26), fill=WHITE)
+        y += 108
+    # A brief with only one breadth line leaves the lower third empty; the
+    # session's own "what matters" lines fill it without inventing anything.
+    if y < 1020 and m["points"]:
+        d.text((64, y), "What matters", font=med(26), fill=SLATE)
+        y += 44
+        for point in m["points"]:
+            if y > 1080:
+                break
+            d.ellipse((72, y + 12, 86, y + 26), fill=EMERALD)
+            y = wrap(d, point, 108, y, W - 108 - 64, reg(25), SLATE2, 36) + 50
     footer(img, "smartsarmaya.com/brief")
     save(img, out, f"01-market-{day.isoformat()}.jpg")
 
@@ -369,6 +484,39 @@ def intro_card(out: Path, counts: tuple[int, int]) -> None:
     save(img, out, "intro-what-it-does.jpg")
 
 
+def events_card(out: Path, events: dict, day: date) -> None:
+    """Book closures and meetings in the days ahead, from the exchange feed."""
+    img = base(17)
+    d = header(img, f"PSX corporate actions · week of {day.strftime('%d %B %Y')}")
+    d.text((64, 200), "Book closures", font=bold(84), fill=WHITE)
+    d.text((64, 292), "coming up", font=bold(84), fill=MINT)
+    d.text((64, 410), "Hold the shares before the book-closure date to be eligible.", font=reg(26), fill=SLATE2)
+    y = 470
+    for ev in events["closures"][:4]:
+        pct, word = payout_words(ev["payout"])
+        panel(img, (64, y, W - 64, y + 118))
+        d = ImageDraw.Draw(img)
+        d.text((92, y + 20), ev["sym"], font=bold(34), fill=WHITE)
+        d.text((92, y + 66), shorten(ev["name"], 34), font=reg(23), fill=SLATE)
+        d.text((W - 92, y + 26), f"{pct} {word}", font=bold(27), fill=MINT, anchor="rm")
+        d.text((W - 92, y + 74), ev["closure"], font=reg(24), fill=SLATE2, anchor="rm")
+        y += 134
+    if events["meetings"]:
+        y += 14
+        d.text((64, y), "Shareholder meetings", font=bold(30), fill=WHITE)
+        y += 48
+        for m in events["meetings"][:3]:
+            d.text((92, y), f"{m['sym']}  {m['type']}", font=med(26), fill=SLATE2)
+            d.text((W - 92, y), m["date"], font=reg(26), fill=SLATE, anchor="rm")
+            y += 38
+    footer(img, "smartsarmaya.com/#events", "From the PSX data portal. Educational, not financial advice.")
+    save(img, out, f"events-{day.isoformat()}.jpg")
+
+
+def shorten(s: str, n: int) -> str:
+    return s if len(s) <= n else s[: n - 1].rstrip(" ,") + "…"
+
+
 def dividend_card(out: Path, sym: str, price: float, dps: float, pct: int, shares: int) -> None:
     """Worked example of the dividend calculator: what a declared payout actually pays."""
     gross = dps * shares
@@ -471,6 +619,7 @@ def main() -> None:
     profit = re.search(r"([\d\.]+%)\s+in profit", home)
     examples = stocks[:2] + [fetch_stock("HBL")]
     halal_card(out, examples, (int(counts.group(1)), int(counts.group(2))) if counts else (0, 0))
+    events_card(out, fetch_events(), today)
     intro_card(out, (int(counts.group(1)), int(counts.group(2))) if counts else (0, 0))
     for s in stocks:  # dividend card for the first symbol with a declared payout
         payout = next((re.search(r"payout (\d+)%", u) for u in s["upcoming"] if u.startswith("payout")), None)
