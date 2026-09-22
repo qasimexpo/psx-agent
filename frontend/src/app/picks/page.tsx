@@ -20,12 +20,12 @@ import { SITE_URL } from "@/lib/site";
 export const revalidate = 600;
 
 export const metadata: Metadata = {
-  title: "Halal stocks in Pakistan, by sector",
+  title: "Shariah-compliant stocks in Pakistan, by sector",
   description:
     "Shariah-compliant stock picks for ten PSX sectors, screened against the KMI All Shares Islamic Index published by the Pakistan Stock Exchange and ranked by AI for short, medium and long term horizons.",
   alternates: { canonical: "/picks" },
   openGraph: {
-    title: "Halal stocks in Pakistan, by sector",
+    title: "Shariah-compliant stocks in Pakistan, by sector",
     description:
       "Ten sectors of Shariah-compliant PSX stocks, screened against the exchange's own Islamic index.",
     url: `${SITE_URL}/picks`,
@@ -53,14 +53,14 @@ export default async function PicksHubPage() {
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "Halal picks", item: `${SITE_URL}/picks` },
+      { "@type": "ListItem", position: 2, name: "Shariah-compliant picks", item: `${SITE_URL}/picks` },
     ],
   };
 
   const itemList = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: "Halal stock picks by PSX sector",
+    name: "Shariah-compliant stock picks by PSX sector",
     itemListElement: sectors.map((sector, index) => ({
       "@type": "ListItem",
       position: index + 1,
@@ -87,7 +87,7 @@ export default async function PicksHubPage() {
             KMI All Shares screened
           </span>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Halal stocks in Pakistan, by sector
+            Shariah-compliant stocks in Pakistan, by sector
           </h1>
           <p className="mt-3 max-w-3xl leading-relaxed text-slate-300">
             Every company below is a constituent of the KMI All Shares Islamic Index published by
@@ -139,7 +139,7 @@ export default async function PicksHubPage() {
 
           <div className="card mt-6 p-5">
             <h2 className="text-base font-bold text-navy-900">
-              How a stock qualifies as halal here
+              How a stock qualifies as Shariah compliant here
             </h2>
             <p className="mt-2 leading-relaxed text-slate-700">
               A stock appears on these pages only if the Pakistan Stock Exchange lists it in the

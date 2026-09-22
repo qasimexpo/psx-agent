@@ -137,7 +137,7 @@ def assemble(out: Path, seg_a: Path, seg_b: Path, end: Path) -> Path:
     page = f"fps={FPS},scale=920:1150:flags=lanczos,pad=1080:1350:80:56:0x0B132B"
     graph = ";".join([
         f"[0:v]{page},{caption.format(font=font, text='1. Type what you hold')}[a]",
-        f"[1:v]{page},fade=t=in:d=0.2,{caption.format(font=font, text=r'2. Value\, P/L\, halal share\, sector risk')}[b]",
+        f"[1:v]{page},fade=t=in:d=0.2,{caption.format(font=font, text=r'2. Value\, P/L\, Shariah-compliant %\, sector risk')}[b]",
         f"[2:v]scale=1080:1350,fps={FPS},fade=t=in:d=0.25,format=yuv420p[c]",
         "[a][b][c]concat=n=3:v=1:a=0,format=yuv420p[v]",
     ])

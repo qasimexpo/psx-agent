@@ -7,7 +7,7 @@ export const SITE_URL = (
 export const SITE_NAME = "SmartSarmaya";
 
 export const SITE_DESCRIPTION =
-  "Free AI research for the Pakistan Stock Exchange. Portfolio audits, stock analysis and halal picks screened against the KMI All Shares Islamic Index.";
+  "Free AI research for the Pakistan Stock Exchange. Portfolio audits, stock analysis and Shariah-compliant picks screened against the KMI All Shares Islamic Index.";
 
 export const CONTACT_EMAIL = "info@smartsarmaya.com";
 
@@ -20,7 +20,7 @@ export const CONTACT_EMAIL = "info@smartsarmaya.com";
 export const EDITOR = {
   name: "Qasim Riaz",
   jobTitle: "Founder and editor",
-  bio: "Builds and runs SmartSarmaya, sets the halal screening rules it follows, and answers for what it publishes. A retail investor on the Pakistan Stock Exchange.",
+  bio: "Builds and runs SmartSarmaya, sets the Shariah screening rules it follows, and answers for what it publishes. A retail investor on the Pakistan Stock Exchange.",
   url: `${SITE_URL}/about#editor`,
   id: `${SITE_URL}/#editor`,
 } as const;

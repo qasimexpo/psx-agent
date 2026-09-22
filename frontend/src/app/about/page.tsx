@@ -9,9 +9,9 @@ import { CONTACT_EMAIL, EDITOR, SITE_NAME, SITE_URL } from "@/lib/site";
  * halal claim is the reason anyone stays on the site.
  */
 export const metadata: Metadata = {
-  title: "About us and how the halal screening works",
+  title: "About us and how the Shariah screening works",
   description:
-    "SmartSarmaya is free AI stock research for the Pakistan Stock Exchange. Learn how our halal screening uses the PSX KMI All Shares Islamic Index and real data.",
+    "SmartSarmaya is free AI stock research for the Pakistan Stock Exchange. Learn how our Shariah screening uses the PSX KMI All Shares Islamic Index and real data.",
   alternates: { canonical: "/about" },
 };
 
@@ -35,7 +35,7 @@ export default function AboutPage() {
             SmartSarmaya reads the Pakistan Stock Exchange data that is already public, computes
             the technical numbers that most retail investors never get time to calculate, and uses
             an AI model to explain what those numbers say in plain language. You can audit a
-            portfolio, look up any listed company, and read the halal picks we publish each day.
+            portfolio, look up any listed company, and read the Shariah-compliant picks we publish each day.
             There is no account, no login and no fee.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-slate-700">
@@ -91,7 +91,7 @@ export default function AboutPage() {
 
         <div className="card mt-5 p-5 sm:p-6">
           <h2 className="text-base font-bold text-navy-900">
-            How the halal screening actually works
+            How the Shariah screening actually works
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-700">
             This is the part that matters most, so it is worth being precise about it.
@@ -106,7 +106,7 @@ export default function AboutPage() {
             exchange adds or removes a company, the badge on this site follows.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-slate-700">
-            The AI never decides what is halal. It is not asked to. Before the model sees anything,
+            The AI never decides what is Shariah compliant. It is not asked to. Before the model sees anything,
             the candidate list is filtered down to KMI constituents only, so the model is choosing
             among stocks the exchange has already screened. If the model were to name a company
             outside that list, the pick is discarded before it is saved. The compliance decision

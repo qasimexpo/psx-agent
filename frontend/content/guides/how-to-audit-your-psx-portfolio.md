@@ -1,15 +1,15 @@
 ---
-title: "How to audit your PSX portfolio for halal compliance in two minutes"
+title: "How to audit your PSX portfolio for Shariah compliance in two minutes"
 description: "A step-by-step walkthrough of the free portfolio audit: what to enter, what each part of the result means, and how to act on it without turning a screening tool into a trading signal."
 date: 2026-09-18
 updated: 2026-09-18
-keywords: ["PSX portfolio audit", "halal portfolio check", "Shariah compliance portfolio Pakistan", "portfolio analyser PSX", "free stock portfolio review"]
+keywords: ["PSX portfolio audit", "Shariah-compliant portfolio check", "Shariah compliance portfolio Pakistan", "portfolio analyser PSX", "free stock portfolio review"]
 image: /images/guides/audit-tool.png
 imageAlt: "The portfolio audit form with symbol, buy price and quantity fields"
 related: ["how-to-check-if-a-psx-stock-is-halal", "how-to-read-a-psx-stock-page", "how-our-ai-picks-work"]
 ---
 
-If you already hold shares on the Pakistan Stock Exchange, the question is not "which stock is halal?" but "how much of what I own is?" The portfolio audit on the home page answers that, along with where your money is concentrated and how each holding is positioned. It is free, needs no account, and forgets what you typed as soon as the result is produced.
+If you already hold shares on the Pakistan Stock Exchange, the question is not "which stock is Shariah compliant?" but "how much of what I own is?" The portfolio audit on the home page answers that, along with where your money is concentrated and how each holding is positioned. It is free, needs no account, and forgets what you typed as soon as the result is produced.
 
 This guide walks through it once, slowly, so the two-minute version makes sense afterwards.
 
@@ -39,7 +39,7 @@ The result comes back in a few seconds. At the top are four tiles, then one card
 
 **Market value and unrealised profit or loss.** Current value at the latest exchange price against what you paid, in rupees and percent. The prices come from the exchange's data portal and can lag the live market, so treat them as indicative; your broker's screen is the final word.
 
-**Shariah compliant.** The share of your portfolio's value that sits in companies listed in the KMI All Shares Islamic Index. This is the tile most people run the audit for. Each holding card below carries a green **Halal** badge if the company is a constituent and no badge if it is not; the reasons a company fails are covered in [how to check whether a PSX stock is halal](/guides/how-to-check-if-a-psx-stock-is-halal).
+**Shariah compliant.** The share of your portfolio's value that sits in companies listed in the KMI All Shares Islamic Index. This is the tile most people run the audit for. Each holding card below carries a green **Halal** badge if the company is a constituent and no badge if it is not; the reasons a company fails are covered in [how to check whether a PSX stock is Shariah compliant](/guides/how-to-check-if-a-psx-stock-is-halal).
 
 **Largest sector.** The sector holding the biggest slice of your money, and its share. Above 40 percent the tile is flagged as concentrated. Pakistani retail portfolios are often 60 to 80 percent in two sectors without the owner noticing, usually because the same WhatsApp group recommended everything. Seeing that as a number is often the most useful line in the whole result.
 
@@ -53,7 +53,7 @@ The audit is a screening tool. Here is how to use it without letting it become a
 
 **A non-compliant holding** is a decision for you, not for the tool. Some investors sell on principle; some hold until the next index review because the company is close to a threshold; some ask a scholar. The audit tells you the status and the source. It does not tell you what your conscience requires.
 
-**High concentration** is worth acting on slowly. If one sector is most of your portfolio, the fix is usually where the next rupee goes, not a sell-off. The [halal picks by sector](/picks) exist partly so that "what else is compliant in a different sector?" has an answer.
+**High concentration** is worth acting on slowly. If one sector is most of your portfolio, the fix is usually where the next rupee goes, not a sell-off. The [Shariah-compliant picks by sector](/picks) exist partly so that "what else is compliant in a different sector?" has an answer.
 
 **A holding in a downtrend** is information, not an instruction. Check the [company page](/stocks) for the full picture: the 200-day average, the upcoming events, the sector peers. The [guide to reading a stock page](/guides/how-to-read-a-psx-stock-page) covers what each number means.
 

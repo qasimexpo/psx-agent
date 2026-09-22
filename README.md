@@ -1,13 +1,13 @@
 # SmartSarmaya
 
-Free AI stock research for the Pakistan Stock Exchange, with halal screening that comes from the
+Free AI stock research for the Pakistan Stock Exchange, with Shariah screening that comes from the
 exchange itself rather than from a language model.
 
 Live at [smartsarmaya.com](https://www.smartsarmaya.com).
 
 ## What makes it different
 
-Every "halal stock picks" tool asks a model which stocks are Shariah compliant. That is guesswork,
+Every "Shariah-compliant stock picks" tool asks a model which stocks are Shariah compliant. That is guesswork,
 and it gets things wrong. SmartSarmaya filters candidates against the **KMI All Shares Islamic
 Index** published by the Pakistan Stock Exchange before the model sees them. The model can only
 rank and explain what it is given, and any ticker it invents is discarded.
@@ -102,7 +102,7 @@ python -m pipeline.run bootstrap
 | `market` | Quotes, movers, sector breadth, index. Four HTTP requests. | Every 30 min, market hours |
 | `technicals` | End-of-day history and indicators | Daily, 17:00 PKT |
 | `events` | Dividends, meetings, news | Daily, 08:00 PKT |
-| `picks` | Top Halal Picks for ten sectors | Trading days, 09:15 PKT |
+| `picks` | Top Shariah-compliant picks for ten sectors | Trading days, 09:15 PKT |
 | `brief --session morning\|closing` | AI market brief | 08:45 and 16:15 PKT |
 | `scorecard` | Marks open picks to market | Daily, 17:30 PKT |
 | `stocks` | AI notes for stock pages | Weekly |

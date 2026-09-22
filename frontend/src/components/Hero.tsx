@@ -125,14 +125,14 @@ export default function Hero({
             </span>
 
             <h1 className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Halal stock research for the
+              AI stock research for the
               <span className="text-emerald-400"> Pakistan Stock Exchange</span>
             </h1>
 
             <p className="mt-5 max-w-md text-base leading-relaxed text-slate-300">
-              Audit your portfolio, analyse any listed company, and read AI picks whose Shariah
-              status comes from the exchange itself, not from a chatbot&apos;s guess. Free, and no
-              account.
+              Audit your portfolio, analyse any listed company, and read AI picks. The
+              Shariah-compliance status of every company comes from the exchange itself, not from
+              a chatbot&apos;s guess. Free, and no account.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -147,16 +147,16 @@ export default function Hero({
                 href="#picks"
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-base font-semibold text-white transition hover:bg-white/10"
               >
-                See today&apos;s halal picks
+                See today&apos;s Shariah-compliant picks
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
 
             <dl className="tabular mt-7 flex flex-wrap items-center gap-y-2 text-sm text-slate-400">
               <div className="pr-5">
-                <dt className="sr-only">Halal stocks</dt>
+                <dt className="sr-only">Shariah-compliant stocks</dt>
                 <dd>
-                  <span className="font-bold text-white">{halalCount || "—"}</span> halal stocks
+                  <span className="font-bold text-white">{halalCount || "—"}</span> Shariah compliant
                 </dd>
               </div>
               <div className="border-l border-white/10 px-5">
@@ -297,7 +297,7 @@ export default function Hero({
         </div>
       </ParallaxStage>
 
-      <nav className="hero-rail" aria-label="Halal picks by sector">
+      <nav className="hero-rail" aria-label="Shariah-compliant picks by sector">
         <Link href="/picks" className="hero-rail-link hero-rail-link-active focus-ring">
           <span className="hero-rail-dot" aria-hidden />
           All picks

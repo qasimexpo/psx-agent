@@ -339,7 +339,7 @@ def stock_post(stock: dict[str, Any]) -> Post:
         text="\n".join(lines),
         link=f"{SITE_URL}/stock/{symbol}",
         image_url=card_url(type="stock", symbol=symbol),
-        hashtags=["#PSX", "#KSE100", f"#{symbol}", "#HalalInvesting"],
+        hashtags=["#PSX", "#KSE100", f"#{symbol}", "#ShariahCompliant"],
     )
 
 
@@ -348,7 +348,7 @@ def picks_post(picks: list[dict[str, Any]], *, horizon: str, pick_date: str) -> 
         horizon, horizon.title()
     )
 
-    lines = [f"Top halal picks - {label} - {pick_date}", ""]
+    lines = [f"Top Shariah-compliant picks - {label} - {pick_date}", ""]
     for pick in picks[:5]:
         lines.append(f"{pick.get('symbol')}  {pick.get('current_price')}  ({pick.get('sector')})")
     lines += [
@@ -361,13 +361,13 @@ def picks_post(picks: list[dict[str, Any]], *, horizon: str, pick_date: str) -> 
         text="\n".join(lines),
         link=f"{SITE_URL}/picks",
         image_url=card_url(type="site"),
-        hashtags=["#PSX", "#HalalInvesting", "#ShariahCompliant"],
+        hashtags=["#PSX", "#ShariahCompliant", "#IslamicFinance"],
     )
 
 
 def track_record_post(board: dict[str, Any], positions: list[dict[str, Any]]) -> Post:
     """The weekly post. Publishing the losers is the whole differentiator."""
-    lines = ["Our halal picks, marked to market. All of them, winners and losers.", ""]
+    lines = ["Our Shariah-compliant picks, marked to market. All of them, winners and losers.", ""]
 
     ranked = sorted(positions, key=lambda row: row.get("return_pct") or 0, reverse=True)
     # Show the top four and the bottom two rather than a straight top six, so
@@ -389,5 +389,5 @@ def track_record_post(board: dict[str, Any], positions: list[dict[str, Any]]) ->
         text="\n".join(lines),
         link=f"{SITE_URL}/track-record",
         image_url=card_url(type="site"),
-        hashtags=["#PSX", "#HalalInvesting", "#KSE100"],
+        hashtags=["#PSX", "#ShariahCompliant", "#KSE100"],
     )

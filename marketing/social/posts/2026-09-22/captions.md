@@ -8,7 +8,7 @@ Three feature posts. The video is the one to boost; the other two are ordinary p
 
 9 seconds, 1080×1350, no sound. Regenerate any day with `python marketing/social/make_video.py <out-dir>`.
 
-**How much of your PSX portfolio is actually halal — and is it all in one sector?**
+**How much of your PSX portfolio is actually Shariah compliant — and is it all in one sector?**
 
 Type what you hold. Seconds later: market value, profit or loss, the share of your money in Shariah-compliant companies, your largest sector, and a short written audit of the risks.
 
@@ -17,7 +17,7 @@ No login. Nothing stored. Free.
 Try it → https://www.smartsarmaya.com/#audit
 
 Educational only, not financial advice.
-#PSX #HalalInvesting #PortfolioAudit #PakistanStockExchange
+#PSX #IslamicFinance #PortfolioAudit #PakistanStockExchange
 
 **Boost settings that fit this post:** goal *Get more website visitors* → button *Learn more* → URL `https://www.smartsarmaya.com/#audit`; audience Pakistan, 22–55, interests *Pakistan Stock Exchange*, *Investment*, *Islamic banking*; placements Facebook feed + Reels; start with a small daily budget for 5 days and read the cost per link click before adding more.
 
@@ -51,15 +51,15 @@ You must hold the shares before the book-closure date to receive it. Educational
 
 SmartSarmaya – smartsarmaya.com
 
-No paid courses. No training packages. No waiting for someone's "indication" in a WhatsApp group. The data you need to judge a stock yourself – halal status, price trend, RSI, support and resistance, upcoming dividends, and a daily brief on where the market is and why – is now at your fingertips, free, so you can build and check your own portfolio with your own understanding.
+No paid courses. No training packages. No waiting for someone's "indication" in a WhatsApp group. The data you need to judge a stock yourself – Shariah status, price trend, RSI, support and resistance, upcoming dividends, and a daily brief on where the market is and why – is now at your fingertips, free, so you can build and check your own portfolio with your own understanding.
 
 How it works:
 
-1️⃣ Is it halal? Type any symbol and the company page answers in its first line. The answer comes from the KMI All Shares Islamic Index, PSX's own Shariah-screened list – not from anyone's opinion. 322 of 546 listed companies currently pass.
+1️⃣ Is it Shariah compliant? Type any symbol and the company page answers in its first line. The answer comes from the KMI All Shares Islamic Index, PSX's own Shariah-screened list – not from anyone's opinion. 322 of 546 listed companies currently pass.
 
 2️⃣ Daily market brief. Written from exchange data before the open and after the close: index levels, sector breadth, top gainers and losers, upcoming dividends and AGMs.
 
-3️⃣ AI picks with a public track record. Halal picks for ten sectors, marked to market every day. Every pick stays on the scorecard, including the losers – check the record before trusting anything, including this site.
+3️⃣ AI picks with a public track record. Shariah-compliant picks for ten sectors, marked to market every day. Every pick stays on the scorecard, including the losers – check the record before trusting anything, including this site.
 
 4️⃣ Portfolio audit. Enter what you hold (symbol, buy price, quantity) and get value, profit/loss, your largest sector, and how much of your money is in Shariah-compliant companies. No login, nothing stored.
 

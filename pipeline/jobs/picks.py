@@ -1,4 +1,4 @@
-"""Top Halal Picks.
+"""Top Shariah-compliant picks.
 
 Three things changed relative to the previous implementation:
 

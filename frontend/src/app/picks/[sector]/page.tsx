@@ -35,14 +35,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { sector: slug } = await params;
   const sector = sectorBySlug(slug);
-  if (!sector) return { title: "Halal picks" };
+  if (!sector) return { title: "Shariah-compliant picks" };
 
   return {
-    title: `Halal ${sector.title.toLowerCase()} on the PSX`,
+    title: `Shariah-compliant ${sector.title.toLowerCase()} on the PSX`,
     description: `Shariah-compliant ${sector.title.toLowerCase()} on the Pakistan Stock Exchange, screened against the KMI All Shares Islamic Index and ranked by AI for short, medium and long term horizons.`,
     alternates: { canonical: `/picks/${sector.slug}` },
     openGraph: {
-      title: `Halal ${sector.title.toLowerCase()} on the PSX`,
+      title: `Shariah-compliant ${sector.title.toLowerCase()} on the PSX`,
       description: sector.blurb,
       url: `${SITE_URL}/picks/${sector.slug}`,
       type: "website",
@@ -86,7 +86,7 @@ export default async function SectorPicksPage({
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "Halal picks", item: `${SITE_URL}/picks` },
+      { "@type": "ListItem", position: 2, name: "Shariah-compliant picks", item: `${SITE_URL}/picks` },
       {
         "@type": "ListItem",
         position: 3,
@@ -116,7 +116,7 @@ export default async function SectorPicksPage({
             KMI All Shares Islamic Index
           </span>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Halal {sector.title.toLowerCase()}
+            Shariah-compliant {sector.title.toLowerCase()}
           </h1>
           <p className="mt-3 max-w-2xl leading-relaxed text-slate-300">{sector.blurb}</p>
         </div>

@@ -94,7 +94,7 @@ def run() -> dict[str, object]:
     pick_day = _as_date(state.get("pick_date"))
     report["pick_date"] = pick_day.isoformat() if pick_day else None
     if pick_day is None:
-        problems.append("No halal picks have ever been published.")
+        problems.append("No picks have ever been published.")
     elif pick_day < session_day:
         problems.append(f"No picks for {session_day}; newest are from {pick_day}.")
 

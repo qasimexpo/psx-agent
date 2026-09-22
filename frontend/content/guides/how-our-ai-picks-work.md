@@ -1,15 +1,15 @@
 ---
-title: "How our AI picks work, and why the model is never asked what is halal"
+title: "How our AI picks work, and why the model is never asked what is Shariah compliant"
 description: "Exactly what happens between the exchange's Shariah list and a pick on this site: which decisions a language model makes, which it is not allowed to make, and how every pick is recorded so you can check whether any of it works."
 date: 2026-09-18
 updated: 2026-09-18
-keywords: ["AI stock picks Pakistan", "halal stock picks PSX", "how AI stock picks work", "AI investing transparency", "SmartSarmaya picks"]
+keywords: ["AI stock picks Pakistan", "Shariah-compliant stock picks PSX", "how AI stock picks work", "AI investing transparency", "SmartSarmaya picks"]
 image: /images/guides/picks-section.png
-imageAlt: "The halal picks section for the cement sector with three ranked pick cards"
+imageAlt: "The Shariah-compliant picks section for the cement sector with three ranked pick cards"
 related: ["how-to-check-if-a-psx-stock-is-halal", "how-to-read-a-psx-stock-page", "how-to-audit-your-psx-portfolio"]
 ---
 
-"AI-powered halal stock picks" is a phrase that should make you suspicious. A language model asked whether a company is Shariah compliant will answer confidently and be wrong often enough to matter. A model asked for stock picks with no data in front of it will produce plausible names and invented prices.
+"AI-powered Shariah-compliant stock picks" is a phrase that should make you suspicious. A language model asked whether a company is Shariah compliant will answer confidently and be wrong often enough to matter. A model asked for stock picks with no data in front of it will produce plausible names and invented prices.
 
 This site uses a language model, so the question is fair: what exactly does it do, and what is it stopped from doing? Here is the whole process, in the order it runs every trading morning.
 
@@ -17,7 +17,7 @@ This site uses a language model, so the question is fair: what exactly does it d
 
 Two things, and they are the two that matter.
 
-**It does not decide what is halal.** Shariah status comes from one source, the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. The [guide to checking compliance](/guides/how-to-check-if-a-psx-stock-is-halal) explains the screen. Before the model sees anything, the candidate list has already been cut to constituents of that index. It is choosing among companies the exchange has screened. It has no way to add one.
+**It does not decide what is Shariah compliant.** Shariah status comes from one source, the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. The [guide to checking compliance](/guides/how-to-check-if-a-psx-stock-is-halal) explains the screen. Before the model sees anything, the candidate list has already been cut to constituents of that index. It is choosing among companies the exchange has screened. It has no way to add one.
 
 **It does not set a price.** Entry prices, buy zones and targets are calculated in code from the database after the model has answered. A number the model writes is never copied to the page.
 
@@ -47,7 +47,7 @@ Everything else is fair game: which of the screened candidates look best, in wha
 
 *The cement sector, short-term horizon. The rank, badge and prices are computed; the three sentences are generated.*
 
-- **Rank and Halal badge.** The order the model chose. The badge repeats what step two already guaranteed.
+- **Rank and Shariah badge.** The order the model chose. The badge repeats what step two already guaranteed.
 - **Move since pick.** The percentage change from the price at publication to the latest price, when the pick is a few days old.
 - **Summary, why now, risk.** The model's three sentences. This is the generated part of the card.
 - **At pick.** The price when the pick was made, from the database.

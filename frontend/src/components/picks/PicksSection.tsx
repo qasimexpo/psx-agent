@@ -59,7 +59,7 @@ function PickCard({ pick, rank, livePrice }: { pick: Pick; rank: number; livePri
         </div>
         <span className="badge badge-on-dark shrink-0">
           <ShieldCheck className="h-3 w-3" aria-hidden />
-          Halal
+          Compliant
         </span>
       </div>
 
@@ -137,7 +137,7 @@ export default function PicksSection({
       <div className="mx-auto max-w-6xl">
         <SectionHeading
           eyebrow="Refreshed every trading morning"
-          title="Top halal picks"
+          title="Top Shariah-compliant picks"
           description="Every candidate is a constituent of the KMI All Shares Islamic Index, so compliance is decided by the exchange rather than by the model. The AI only explains and ranks what it is given."
           action={
             <Link

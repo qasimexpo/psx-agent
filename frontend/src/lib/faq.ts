@@ -10,14 +10,14 @@ export type FaqItem = { question: string; answer: string };
 
 export const FAQ_ITEMS: FaqItem[] = [
   {
-    question: "How do you decide which PSX stocks are halal?",
+    question: "How do you decide which PSX stocks are Shariah compliant?",
     answer:
-      "Shariah status comes from the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. A stock is labelled Shariah compliant only if the exchange lists it as a constituent. The AI is never asked to make that judgement, and it can only choose among stocks that already passed the screen.",
+      "Shariah status comes from the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. A stock is labelled Shariah compliant (halal) only if the exchange lists it as a constituent. The AI is never asked to make that judgement, and it can only choose among stocks that already passed the screen.",
   },
   {
     question: "Is SmartSarmaya free?",
     answer:
-      "Yes. Portfolio audits, stock analysis, halal picks and the daily market brief are all free, with no account or registration. The site is supported by advertising.",
+      "Yes. Portfolio audits, stock analysis, Shariah-compliant picks and the daily market brief are all free, with no account or registration. The site is supported by advertising.",
   },
   {
     question: "Do you store my portfolio?",

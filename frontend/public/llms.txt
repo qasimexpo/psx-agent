@@ -1,8 +1,8 @@
 # SmartSarmaya
 
-> Free AI research for the Pakistan Stock Exchange. Portfolio audits, company pages with technicals, a twice-daily market brief, and halal stock picks screened against the KMI All Shares Islamic Index. Educational only; not financial advice and not a religious ruling.
+> Free AI research for the Pakistan Stock Exchange. Portfolio audits, company pages with technicals, a twice-daily market brief, and Shariah-compliant stock picks screened against the KMI All Shares Islamic Index. Educational only; not financial advice and not a religious ruling.
 
-Shariah status on this site comes from one source: the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. A stock is called Shariah compliant only if the exchange lists it as a constituent. The AI never decides what is halal.
+Shariah status on this site comes from one source: the KMI All Shares Islamic Index published by the Pakistan Stock Exchange. A stock is called Shariah compliant only if the exchange lists it as a constituent. The AI never decides what is Shariah compliant.
 
 Prices, index levels, dividends and corporate calendars come from the PSX Data Portal (dps.psx.com.pk) and may be delayed. Technical indicators are computed from five years of exchange closing prices.
 
@@ -10,7 +10,7 @@ Prices, index levels, dividends and corporate calendars come from the PSX Data P
 
 - [Daily market brief](https://www.smartsarmaya.com/brief): KSE-100 close, movers, and what moved them, before the open and after the close every trading day.
 - [Stock directory](https://www.smartsarmaya.com/stocks): every KSE-100 and Shariah-compliant listing with a page per company at /stock/{SYMBOL}.
-- [Halal picks by sector](https://www.smartsarmaya.com/picks): AI-ranked KMI constituents for ten sectors, with buy zones and targets.
+- [Shariah-compliant picks by sector](https://www.smartsarmaya.com/picks): AI-ranked KMI constituents for ten sectors, with buy zones and targets.
 - [Track record](https://www.smartsarmaya.com/track-record): every published pick marked to market from its entry price, winners and losers alike.
 - [About and methodology](https://www.smartsarmaya.com/about): how the screening works, data sources, limitations, and common questions.
 

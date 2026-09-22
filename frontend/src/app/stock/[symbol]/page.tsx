@@ -56,7 +56,7 @@ export async function generateMetadata({
     // Absolute, because the layout's " | SmartSarmaya" suffix pushed every
     // stock title past what a result page shows. The company name leads: it
     // is what people type, and the ticker alone was all the old title had.
-    title: { absolute: `${label} share price & halal status` },
+    title: { absolute: `${label} share price & Shariah status` },
     // Kept under 155 characters so the halal verdict and price both survive
     // the snippet. "Latest" rather than "live": quotes are end-of-day.
     description: `${label} is ${halal} on the PSX. Latest price ${money(stock.current_price)} PKR (${percent(stock.change_pct)}). Technicals, 52-week range and KMI index status.`,
@@ -392,7 +392,7 @@ export default async function StockPage({
 
         <section className="card mt-4 p-5">
           <h2 className="text-base font-bold text-navy-900">
-            Is {clean} halal to invest in?
+            Is {clean} Shariah compliant?
           </h2>
           <p className="mt-2 leading-relaxed text-slate-700">
             {stock.is_kmi ? (
@@ -442,7 +442,7 @@ export default async function StockPage({
                       {percent(peer.change_pct)}
                     </span>
                     {peer.is_kmi ? (
-                      <span className="text-xs text-emerald-700">halal</span>
+                      <span className="text-xs text-emerald-700">compliant</span>
                     ) : null}
                   </Link>
                 </li>
@@ -453,7 +453,7 @@ export default async function StockPage({
                 href={`/picks/${sectorSlug}`}
                 className="mt-4 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-800"
               >
-                See the halal picks for this sector
+                See the Shariah-compliant picks for this sector
               </Link>
             ) : null}
           </section>
@@ -472,7 +472,7 @@ export default async function StockPage({
             href="/#picks"
             className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-navy-900 transition hover:border-emerald-300"
           >
-            See today&apos;s halal picks
+            See today&apos;s Shariah-compliant picks
           </Link>
         </div>
 

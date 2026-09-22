@@ -153,7 +153,7 @@ pasting secrets into GitHub.
 2. Profile image `frontend/public/images/logo-transparent.png`, cover
    `banner 1.jpg`. The same on every platform, so the brand is recognisable.
 3. Bio, identical everywhere:
-   > Free AI research for the Pakistan Stock Exchange. Halal picks screened
+   > Free AI research for the Pakistan Stock Exchange. Shariah-compliant picks screened
    > against the KMI All Shares Islamic Index — the exchange's own list, not a
    > chatbot's guess. Every pick tracked publicly. Not financial advice.
 4. Link to `https://www.smartsarmaya.com`.
@@ -192,7 +192,7 @@ This is what the code already does, with no further configuration:
 | When (PKT) | Post | Source job |
 | --- | --- | --- |
 | 08:45 weekdays | Morning brief headline and KSE-100 level | `brief --session morning` |
-| 09:15 weekdays | The day's top halal picks across sectors | `picks` |
+| 09:15 weekdays | The day's top Shariah-compliant picks across sectors | `picks` |
 | 16:15 weekdays | Closing scoreboard: index close, three gainers, three losers | `brief --session closing` |
 | Friday 17:30 | Track record: every open pick marked to market | `scorecard` |
 
@@ -219,7 +219,7 @@ Full technicals and the AI read:
 smartsarmaya.com/stock/PSO
 
 Not financial advice.
-#PSX #KSE100 #PakistanStockExchange #HalalInvesting
+#PSX #KSE100 #PakistanStockExchange #ShariahCompliant
 ```
 
 Daily closing scoreboard:
@@ -236,7 +236,7 @@ Today's brief: smartsarmaya.com/brief/2026-09-05
 Track record, weekly:
 
 ```
-Our halal picks from 30 days ago, marked to market. All of them.
+Our Shariah-compliant picks from 30 days ago, marked to market. All of them.
 
 OGDC  +8.2%
 MEBL  +4.1%

@@ -26,15 +26,16 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "SmartSarmaya | Halal AI stock research for PSX and the KSE-100",
+    default: "SmartSarmaya | Shariah-compliant AI research for the PSX",
     template: "%s | SmartSarmaya",
   },
   description:
-    "Free AI research for the Pakistan Stock Exchange. Audit your portfolio, analyse any listed company, and read halal stock picks screened against the KMI All Shares Islamic Index. Educational only, not financial advice.",
+    "Free AI research for the Pakistan Stock Exchange. Audit your portfolio, analyse any listed company, and read Shariah-compliant stock picks screened against the KMI All Shares Islamic Index. Educational only, not financial advice.",
   keywords: [
     "PSX",
     "Pakistan Stock Exchange",
     "KSE-100",
+    "Shariah compliant stocks Pakistan",
     "halal stocks Pakistan",
     "Shariah compliant stocks PSX",
     "KMI All Shares Islamic Index",
@@ -55,9 +56,9 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: "/" },
   openGraph: {
-    title: "SmartSarmaya | Halal AI stock research for PSX",
+    title: "SmartSarmaya | Shariah-compliant AI research for the PSX",
     description:
-      "Audit your PSX portfolio and read AI halal picks screened against the exchange's own Islamic index. Free, no account needed.",
+      "Audit your PSX portfolio and read AI Shariah-compliant picks screened against the exchange's own Islamic index. Free, no account needed.",
     url: SITE_URL,
     siteName: "SmartSarmaya",
     locale: "en_PK",
@@ -67,15 +68,15 @@ export const metadata: Metadata = {
         url: "/images/og-default.jpg",
         width: 1200,
         height: 630,
-        alt: "SmartSarmaya, halal AI stock research for the Pakistan Stock Exchange",
+        alt: "SmartSarmaya, Shariah-compliant AI stock research for the Pakistan Stock Exchange",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "SmartSarmaya | Halal AI stock research for PSX",
+    title: "SmartSarmaya | Shariah-compliant AI research for the PSX",
     description:
-      "Audit your PSX portfolio and read AI halal picks screened against the exchange's own Islamic index.",
+      "Audit your PSX portfolio and read AI Shariah-compliant picks screened against the exchange's own Islamic index.",
     images: ["/images/og-default.jpg"],
   },
   robots: {

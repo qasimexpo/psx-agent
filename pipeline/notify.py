@@ -112,7 +112,7 @@ def broadcast_track_record(board: dict[str, Any], positions: list[dict[str, Any]
 
     ranked = sorted(positions, key=lambda row: row.get("return_pct") or 0, reverse=True)
     lines = [
-        "<b>Halal picks: the running record</b>",
+        "<b>Shariah-compliant picks: the running record</b>",
         "",
         "Every open pick, marked to market. Winners and losers.",
         "",
@@ -141,7 +141,7 @@ def broadcast_track_record(board: dict[str, Any], positions: list[dict[str, Any]
 
 
 def broadcast_picks(picks: list[dict[str, Any]], *, horizon: str, pick_date: str) -> bool:
-    """Announce the day's halal picks."""
+    """Announce the day's Shariah-compliant picks."""
     if not picks:
         return False
 
@@ -152,7 +152,7 @@ def broadcast_picks(picks: list[dict[str, Any]], *, horizon: str, pick_date: str
     }.get(horizon, horizon.title())
 
     lines = [
-        f"<b>Top halal picks - {label}</b>",
+        f"<b>Top Shariah-compliant picks - {label}</b>",
         f"<i>{pick_date}</i>",
         "",
         "Screened against the KMI All Shares Islamic Index.",

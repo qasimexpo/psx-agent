@@ -12,7 +12,7 @@ import { EDITOR, SITE_URL } from "@/lib/site";
 export const revalidate = 900;
 
 export const metadata: Metadata = {
-  title: "Track record of our AI halal picks",
+  title: "Track record of our AI Shariah-compliant picks",
   description:
     "Every AI stock pick SmartSarmaya has published for the Pakistan Stock Exchange, with its entry price and current return. The good and the bad, updated daily.",
   alternates: { canonical: "/track-record" },
@@ -34,7 +34,7 @@ export default async function TrackRecordPage() {
   const dataset = {
     "@context": "https://schema.org",
     "@type": "Dataset",
-    name: "SmartSarmaya halal stock pick track record",
+    name: "SmartSarmaya Shariah-compliant stock pick track record",
     description:
       "Every AI-generated Shariah-compliant stock pick published by SmartSarmaya for the Pakistan Stock Exchange, with entry date, entry price, latest price and return, marked to market every trading day.",
     url: `${SITE_URL}/track-record`,
@@ -53,7 +53,7 @@ export default async function TrackRecordPage() {
       "days held",
       "target reached",
     ],
-    keywords: ["PSX", "halal stocks", "KMI All Shares Islamic Index", "stock picks", "track record"],
+    keywords: ["PSX", "Shariah compliant stocks", "KMI All Shares Islamic Index", "stock picks", "track record"],
   };
 
   return (

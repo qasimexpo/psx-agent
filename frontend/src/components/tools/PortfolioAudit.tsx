@@ -344,7 +344,7 @@ function AuditResult({ result }: { result: PortfolioResult }) {
                     <div className="flex items-center gap-1.5">
                       <SymbolLink symbol={holding.symbol} />
                       {holding.is_kmi ? (
-                        <span className="badge badge-halal">Halal</span>
+                        <span className="badge badge-halal">Compliant</span>
                       ) : (
                         <span className="badge badge-neutral">Not KMI</span>
                       )}

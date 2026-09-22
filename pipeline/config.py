@@ -54,7 +54,7 @@ PICKS_PAUSE_SECONDS = int(os.environ.get("PICKS_PAUSE_SECONDS", "30"))
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite")
 
 # --- Coverage -------------------------------------------------------------
-# Sectors surfaced in the Top Halal Picks selector. Names are display labels;
+# Sectors surfaced in the Top Shariah-compliant picks selector. Names are display labels;
 # symbols are resolved from the live PSX sector codes at runtime.
 PICK_SECTORS = (
     "Banking (Islamic)",

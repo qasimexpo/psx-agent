@@ -3,7 +3,7 @@
     python -m pipeline.run market        quotes, movers, sector breadth, index
     python -m pipeline.run technicals    end-of-day history and indicators
     python -m pipeline.run events        dividends, board meetings, news
-    python -m pipeline.run picks         Top Halal Picks for every sector
+    python -m pipeline.run picks         Top Shariah-compliant picks for every sector
     python -m pipeline.run scorecard     mark open picks to market
     python -m pipeline.run brief --session morning|closing
     python -m pipeline.run stocks        AI notes for stock pages

@@ -9,7 +9,7 @@ const COLUMNS = [
     links: [
       { href: "/#audit", label: "Portfolio audit" },
       { href: "/#analyzer", label: "Stock analyser" },
-      { href: "/picks", label: "Top halal picks" },
+      { href: "/picks", label: "Shariah-compliant picks" },
       { href: "/calculators", label: "Calculators" },
     ],
   },
