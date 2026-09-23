@@ -28,6 +28,12 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * A stat tile: label, value, and one line saying what the value is measured
+ * against. The value carries the page's default proportional figures rather
+ * than tabular ones - tabular gives every digit the width of a zero, which
+ * reads loose at this size and only earns its keep in a column of numbers.
+ */
 function Stat({
   label,
   value,
@@ -41,9 +47,9 @@ function Stat({
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={`tabular mt-1 text-2xl font-bold ${tone || "text-white"}`}>{value}</p>
-      <p className="mt-0.5 text-[11px] leading-tight text-slate-400">{sub}</p>
+      <p className="text-xs font-semibold text-slate-400">{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${tone || "text-white"}`}>{value}</p>
+      <p className="mt-0.5 text-xs leading-tight text-slate-500">{sub}</p>
     </div>
   );
 }
@@ -89,17 +95,37 @@ export default async function MarketMapPage() {
             {asOf ? `Prices as of ${longDate(asOf.toISOString())}, ${asOf.toLocaleTimeString("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" })} PKT` : "Waiting for the first price update"}
           </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat
-              label="KSE-100 index"
-              value={index ? index.value.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}
-              sub={index ? `${percent(index.change_pct)} on the session` : "No snapshot yet"}
-              tone={index ? (index.change_pct >= 0 ? "text-emerald-300" : "text-rose-300") : ""}
-            />
+          {/* One hero figure, and it is the index: the number the whole page is
+              about. The other three are supporting tiles, not four peers
+              competing for the eye. */}
+          <div className="mt-7">
+            <div>
+              <p className="text-xs font-semibold text-slate-400">KSE-100 index</p>
+              <div className="mt-1 flex flex-wrap items-end gap-x-4 gap-y-1">
+                <p className="text-5xl font-bold leading-none text-white sm:text-6xl">
+                  {index ? index.value.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}
+                </p>
+                {index ? (
+                  <p
+                    className={`text-lg font-semibold ${
+                      index.change_pct >= 0 ? "text-emerald-300" : "text-rose-300"
+                    }`}
+                  >
+                    {percent(index.change_pct)}
+                    <span className="ml-1.5 text-sm font-normal text-slate-400">
+                      since the previous close
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <Stat
               label="Advances / declines"
               value={`${map.advances} / ${map.declines}`}
-              sub={`${map.unchanged} unchanged, of ${map.tiles.length} constituents that traded`}
+              sub={`${map.unchanged} unchanged, of ${map.tiles.length} that traded`}
             />
             <Stat
               label="Volume"
