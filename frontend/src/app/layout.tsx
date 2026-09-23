@@ -3,6 +3,7 @@ import { DM_Sans } from "next/font/google";
 import Script from "next/script";
 import Footer from "@/components/site/Footer";
 import Navbar from "@/components/site/Navbar";
+import NewsletterSlideIn from "@/components/tools/NewsletterSlideIn";
 import JsonLd from "@/components/JsonLd";
 import { getAdsenseClientId } from "@/lib/adsense";
 import { SITE_URL } from "@/lib/site";
@@ -125,6 +126,7 @@ export default function RootLayout({
           {children}
         </main>
         <Footer />
+        <NewsletterSlideIn />
 
         {analyticsId ? (
           <>
