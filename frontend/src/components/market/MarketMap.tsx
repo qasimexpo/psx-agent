@@ -35,17 +35,50 @@ const PHONE_TILES = 30;
 type SectorGroup = { code: string; name: string; value: number; tiles: MapTile[] };
 
 /**
- * Emerald for up, rose for down, slate for unchanged, saturating at ±5%.
- * Daily limits on the PSX are ±10%, but most sessions live inside ±3%, so
- * ±5% is where the scale has to top out to show any variation at all.
+ * The diverging scale: emerald for up, rose for down, a neutral grey where the
+ * day was flat. Five bands per arm, cut at the same thresholds on each side, so
+ * a tile's shade means the same thing whichever way it moved.
+ *
+ * Three things about it were measured rather than chosen.
+ *
+ * Green against red is the convention every PSX reader already knows, and it is
+ * also the one pair that red-green colour blindness erases: the hue channel is
+ * gone for roughly one man in twelve, and lightness is all that is left. So the
+ * two arms are deliberately not mirror images. Each rose band is darker than
+ * the emerald band it faces, by 0.08 to 0.13 in OKLab L at every step, which
+ * keeps up and down apart when the colour does not.
+ *
+ * A label sitting inside a filled tile takes navy or white by that fill's
+ * luminance, never one colour for all of them. Navy on the deepest rose is
+ * 2.9:1, which fails; white on it is 6.3:1. Every band here clears 4.5:1 with
+ * the ink named below.
+ *
+ * The bands are fixed, not fitted to the session. PSX limits a move to ±10%,
+ * but an ordinary day lives inside ±3%, so a scale stretched to each day's
+ * extremes would paint a quiet session like a crash and make two days
+ * incomparable.
  */
-function fill(changePct: number): string {
-  if (changePct === 0) return "#94a3b8";
-  const strength = Math.min(Math.abs(changePct) / 5, 1);
-  const step = strength < 0.25 ? 0 : strength < 0.5 ? 1 : strength < 0.8 ? 2 : 3;
-  return changePct > 0
-    ? ["#34d399", "#10b981", "#059669", "#047857"][step]
-    : ["#fda4af", "#fb7185", "#e11d48", "#be123c"][step];
+const NEUTRAL_BAND = 0.1; // percent; below this the day is flat, not "slightly up"
+const BAND_EDGES = [0.5, 1.5, 3, 5]; // then the top band, ≥5%
+
+const UP_FILLS = ["#6ee7b7", "#34d399", "#10b981", "#059669", "#047857"];
+const DOWN_FILLS = ["#fb7185", "#f43f5e", "#e11d48", "#be123c", "#881337"];
+const FLAT_FILL = "#cbd5e1";
+
+const NAVY_INK = "#0b132b";
+const WHITE_INK = "#ffffff";
+
+/** Fill and the ink that clears 4.5:1 on it. */
+function paint(changePct: number): { fill: string; ink: string } {
+  if (Math.abs(changePct) < NEUTRAL_BAND) return { fill: FLAT_FILL, ink: NAVY_INK };
+  const magnitude = Math.abs(changePct);
+  const band = BAND_EDGES.findIndex((edge) => magnitude < edge);
+  const index = band === -1 ? BAND_EDGES.length : band;
+  const fill = changePct > 0 ? UP_FILLS[index] : DOWN_FILLS[index];
+  // Measured with the skill's contrast(): navy clears 4.5:1 on every band except
+  // emerald 700 and rose 600 and darker, where white does.
+  const needsWhite = fill === "#047857" || fill === "#e11d48" || fill === "#be123c" || fill === "#881337";
+  return { fill, ink: needsWhite ? WHITE_INK : NAVY_INK };
 }
 
 function money(value: number): string {
@@ -155,25 +188,33 @@ function MapSvg({
 
         {companies.map((rect) => {
           const tile = rect.item;
+          const { fill, ink } = paint(tile.change_pct);
+          const signed = `${tile.change_pct > 0 ? "+" : ""}${tile.change_pct.toFixed(2)}%`;
+          // Measure before placing: a label that does not fit is left out rather
+          // than clipped, and the readout below carries it either way.
+          const size = Math.max(8, Math.min(15, rect.w / 5.2, rect.h / 2.6));
           const showSymbol = rect.w > 34 && rect.h > 18;
           const showChange = rect.w > 44 && rect.h > 32;
-          const size = Math.max(8, Math.min(15, rect.w / 5.2, rect.h / 2.6));
           return (
-            <g key={tile.symbol}>
+            <g key={tile.symbol} className="map-tile">
+              {/* The mark is the hit target, so the whole tile answers on hover
+                  and on keyboard focus. Native SVG, so the chart still ships no
+                  JavaScript, and a screen reader reads the same sentence. */}
+              <title>{`${tile.symbol} — ${tile.name || tile.sector_name}. ${signed} today. Rs ${money(tile.value_traded)} traded.`}</title>
               <rect
                 x={rect.x}
                 y={rect.y}
-                width={Math.max(0, rect.w - 1)}
-                height={Math.max(0, rect.h - 1)}
-                fill={fill(tile.change_pct)}
+                width={Math.max(0, rect.w - 2)}
+                height={Math.max(0, rect.h - 2)}
+                fill={fill}
                 rx={3}
               />
               {showSymbol ? (
                 <text
-                  x={rect.x + rect.w / 2}
-                  y={rect.y + rect.h / 2 + (showChange ? -2 : 4)}
+                  x={rect.x + (rect.w - 2) / 2}
+                  y={rect.y + (rect.h - 2) / 2 + (showChange ? -2 : 4)}
                   textAnchor="middle"
-                  fill="#0b132b"
+                  fill={ink}
                   fontSize={size}
                   fontWeight={700}
                 >
@@ -182,14 +223,13 @@ function MapSvg({
               ) : null}
               {showChange ? (
                 <text
-                  x={rect.x + rect.w / 2}
-                  y={rect.y + rect.h / 2 + size - 1}
+                  x={rect.x + (rect.w - 2) / 2}
+                  y={rect.y + (rect.h - 2) / 2 + size - 1}
                   textAnchor="middle"
-                  fill="#0b132b"
+                  fill={ink}
                   fontSize={Math.max(8, size - 3)}
                 >
-                  {tile.change_pct > 0 ? "+" : ""}
-                  {tile.change_pct.toFixed(2)}%
+                  {signed}
                 </text>
               ) : null}
             </g>
@@ -230,16 +270,26 @@ export default function MarketMap({ tiles }: { tiles: MapTile[] }) {
           <span className="sm:hidden"> On a small screen the map shows the {PHONE_TILES} most
             traded; the table below has all {tiles.length}.</span>
         </p>
-        <p className="flex flex-wrap items-center gap-1.5">
-          <Swatch colour="#be123c" />
-          <Swatch colour="#e11d48" />
-          <Swatch colour="#fb7185" />
-          <Swatch colour="#fda4af" />
-          <span className="px-1">−5% to +5%</span>
-          <Swatch colour="#34d399" />
-          <Swatch colour="#10b981" />
-          <Swatch colour="#059669" />
-          <Swatch colour="#047857" />
+        {/* A diverging legend has to show its middle: the grey is what "the day
+            did nothing" looks like, and without it a reader cannot tell the
+            faintest green from no change at all. */}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-slate-600">−5% or worse</span>
+          <span className="inline-flex items-center gap-0.5">
+            {[...DOWN_FILLS].reverse().map((colour) => (
+              <Swatch key={colour} colour={colour} />
+            ))}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Swatch colour={FLAT_FILL} />
+            <span className="text-slate-600">flat</span>
+          </span>
+          <span className="inline-flex items-center gap-0.5">
+            {UP_FILLS.map((colour) => (
+              <Swatch key={colour} colour={colour} />
+            ))}
+          </span>
+          <span className="text-slate-600">+5% or better</span>
         </p>
       </figcaption>
 

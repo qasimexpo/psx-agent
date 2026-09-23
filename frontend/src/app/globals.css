@@ -881,3 +881,19 @@ body {
     transform: none;
   }
 }
+
+/* Market map tiles: the mark is the hit target, so it responds to the pointer
+   and to keyboard focus. Opacity rather than a colour change, so the tile's
+   value is never misstated by the highlight. */
+.map-tile {
+  transition: opacity 120ms ease-out;
+}
+.map-tile:hover,
+.map-tile:focus-visible {
+  opacity: 0.78;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-tile {
+    transition: none;
+  }
+}
