@@ -10,6 +10,7 @@ Prices, index levels, dividends and corporate calendars come from the PSX Data P
 
 - [Daily market brief](https://www.smartsarmaya.com/brief): KSE-100 close, movers, and what moved them, before the open and after the close every trading day.
 - [Stock directory](https://www.smartsarmaya.com/stocks): every KSE-100 and Shariah-compliant listing with a page per company at /stock/{SYMBOL}.
+- [KSE-100 market map](https://www.smartsarmaya.com/market-map): every KSE-100 constituent as a tile, sized by the day's value traded and coloured by its move, grouped by sector, with the same data as a table.
 - [Shariah-compliant picks by sector](https://www.smartsarmaya.com/picks): AI-ranked KMI constituents for ten sectors, with buy zones and targets.
 - [Track record](https://www.smartsarmaya.com/track-record): every published pick marked to market from its entry price, winners and losers alike.
 - [About and methodology](https://www.smartsarmaya.com/about): how the screening works, data sources, limitations, and common questions.

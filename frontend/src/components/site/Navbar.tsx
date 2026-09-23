@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/#audit", label: "Portfolio audit" },
   { href: "/picks", label: "Picks" },
   { href: "/brief", label: "Daily brief" },
+  { href: "/market-map", label: "Market map" },
   { href: "/stocks", label: "Stocks" },
   { href: "/track-record", label: "Track record" },
   { href: "/guides", label: "Guides" },
