@@ -38,15 +38,23 @@ def _table_columns() -> dict[str, set[str]]:
         for model in (
             db.Stock, db.MarketIndex, db.Mover, db.SectorStat, db.CorporateEvent,
             db.Payout, db.NewsItem, db.TopPick, db.PickTrack, db.DailyBrief,
-            db.StockNote,
+            db.StockNote, db.Subscriber,
         )
     }
+
+
+def _strip_sql_comments(sql: str) -> str:
+    """Drop `-- ...` comments, whose prose would otherwise read as columns."""
+    return re.sub(r"--[^\n]*", "", sql)
 
 
 def _sql_blocks() -> list[str]:
     """Every template literal passed to the tagged `query` helper."""
     source = DB_TS.read_text(encoding="utf-8")
-    return re.findall(r"query<[^>]*>`(.*?)`", source, re.DOTALL)
+    return [
+        _strip_sql_comments(block)
+        for block in re.findall(r"query<[^>]*>`(.*?)`", source, re.DOTALL)
+    ]
 
 
 @pytest.fixture(scope="module")

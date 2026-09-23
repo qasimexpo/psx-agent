@@ -48,6 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/`, lastModified: latest(marketAt, briefAt), changeFrequency: "hourly", priority: 1 },
     { url: `${SITE_URL}/brief`, lastModified: briefAt, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/stocks`, lastModified: marketAt, changeFrequency: "daily", priority: 0.9 },
+    { url: `${SITE_URL}/market-map`, lastModified: marketAt, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE_URL}/picks`, lastModified: marketAt, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/track-record`, lastModified: marketAt, changeFrequency: "daily", priority: 0.8 },
     {

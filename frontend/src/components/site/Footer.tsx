@@ -10,6 +10,7 @@ const COLUMNS = [
       { href: "/#audit", label: "Portfolio audit" },
       { href: "/#analyzer", label: "Stock analyser" },
       { href: "/picks", label: "Shariah-compliant picks" },
+      { href: "/market-map", label: "Market map" },
       { href: "/calculators", label: "Calculators" },
     ],
   },

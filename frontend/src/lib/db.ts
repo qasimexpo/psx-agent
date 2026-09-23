@@ -252,6 +252,29 @@ export type BriefRow = {
   updated_at: string | null;
 };
 
+export type MapTile = {
+  symbol: string;
+  name: string;
+  sector_code: string;
+  sector_name: string;
+  price: number;
+  change_pct: number;
+  volume: number;
+  /** Last price x volume. An approximation of value traded; see getMarketMap. */
+  value_traded: number;
+  is_kmi: boolean;
+};
+
+export type MarketMap = {
+  tiles: MapTile[];
+  advances: number;
+  declines: number;
+  unchanged: number;
+  totalVolume: number;
+  totalValue: number;
+  updatedAt: string | null;
+};
+
 export type Scorecard = {
   total: number;
   winners: number;
@@ -800,6 +823,55 @@ export async function getMarketStats(): Promise<{
     total: num(rows[0].total),
     halal: num(rows[0].halal),
     updatedAt: rows[0].updated_at ? String(rows[0].updated_at) : null,
+  };
+}
+
+/**
+ * Every KSE-100 constituent that traded, for the market map.
+ *
+ * `value_traded` is the last price times the day's volume. The exchange's own
+ * turnover figure is the sum of each individual trade's value, which is not in
+ * the data we collect, so this is an approximation and is labelled as one
+ * wherever it is shown. It is the right size metric regardless: it puts the
+ * tiles where the money went, rather than letting a one-rupee share with a
+ * huge share count dominate the picture.
+ */
+export async function getMarketMap(): Promise<MarketMap> {
+  const rows = await query<Row>`
+    SELECT symbol, name, sector_code, sector_name, is_kmi,
+           current_price, change_pct, volume,
+           current_price * volume AS value_traded,
+           MAX(quote_at) OVER () AS updated_at
+    FROM stocks
+    WHERE is_kse100 = true AND current_price > 0 AND volume > 0
+      -- Ex-entitlement lines (BOPXD, LUCKXD, ...) are the same company trading
+      -- separately for a few days, so including them would count it twice and
+      -- fill the map with near-duplicate tiles. Same rule as parentSymbol() in
+      -- lib/symbols.ts: only a row whose name is just its symbol is one of these.
+      AND NOT (name = symbol AND symbol ~ '(XD|XB|XR|NC|WU)$')
+    ORDER BY current_price * volume DESC
+  `;
+
+  const tiles: MapTile[] = rows.map((row) => ({
+    symbol: String(row.symbol),
+    name: String(row.name ?? ""),
+    sector_code: String(row.sector_code ?? ""),
+    sector_name: String(row.sector_name ?? "Unclassified"),
+    price: num(row.current_price),
+    change_pct: num(row.change_pct),
+    volume: num(row.volume),
+    value_traded: num(row.value_traded),
+    is_kmi: Boolean(row.is_kmi),
+  }));
+
+  return {
+    tiles,
+    advances: tiles.filter((tile) => tile.change_pct > 0).length,
+    declines: tiles.filter((tile) => tile.change_pct < 0).length,
+    unchanged: tiles.filter((tile) => tile.change_pct === 0).length,
+    totalVolume: tiles.reduce((sum, tile) => sum + tile.volume, 0),
+    totalValue: tiles.reduce((sum, tile) => sum + tile.value_traded, 0),
+    updatedAt: rows.length ? toIsoInstant(rows[0].updated_at) : null,
   };
 }
 
