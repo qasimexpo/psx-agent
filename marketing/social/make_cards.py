@@ -81,6 +81,25 @@ def text(el) -> str:
     return plain(el.get_text(" ", strip=True)) if el else ""
 
 
+def movers_from_home(home: BeautifulSoup, heading: str, limit: int = 3) -> list[tuple[str, str]]:
+    """The home page's own movers panel, as (symbol, change) pairs.
+
+    The brief's prose is the better source when it names movers, because those
+    are the ones the session was actually about. This is the fallback for a
+    session the model described without naming any, where an empty panel on a
+    card would look broken.
+    """
+    label = home.find(string=re.compile(rf"^{re.escape(heading)}$"))
+    if not label:
+        return []
+    block = plain(label.find_parent(["div", "section"]).get_text(" ", strip=True))
+    pairs = re.findall(r"\b([A-Z][A-Z0-9]{1,7})\b(?:[^%]{0,80}?)\s([-+][\d.]+)%", block)
+    seen: dict[str, str] = {}
+    for sym, pct in pairs:
+        seen.setdefault(sym, f"{'+' if not pct.startswith('-') else '-'}{pct.lstrip('+-')}%")
+    return list(seen.items())[:limit]
+
+
 def fetch_market() -> dict:
     home = soup("/")
     t = home.get_text(" ", strip=True)
@@ -132,6 +151,11 @@ def fetch_market() -> dict:
             prose, re.I | re.S,
         )
         active_tuple = (alt.group(1), f"+{alt.group(2)}%", f"{float(alt.group(3)):.1f}M shares") if alt else None
+    gainers = gainers or movers_from_home(home, "Top gainers")
+    losers = [(sym, pct) for sym, pct in losers] or movers_from_home(home, "Top losers")
+    if not active_tuple:
+        top = movers_from_home(home, "Most active", limit=1)
+        active_tuple = (top[0][0], top[0][1], "") if top else None
     return {
         "index": m.group(1) if m else "",
         "index_change": (m.group(2), m.group(3)) if m else ("", ""),
@@ -139,8 +163,8 @@ def fetch_market() -> dict:
         "session": "morning" if link.endswith("/morning") else "closing",
         "url": link,
         "points": points,
-        "gainers": [(s, f"+{p}%") for s, p in gainers],
-        "losers": [(s, f"−{p}%") for s, p in losers],
+        "gainers": [(s, p if p.endswith("%") else f"+{p}%") for s, p in gainers],
+        "losers": [(s, p.replace("-", "−") if p.endswith("%") else f"−{p}%") for s, p in losers],
         "breadth": list({(int(u), int(d)): (n.strip(), int(u), int(d)) for n, u, d in breadth}.values())[:3],
         "active": active_tuple,
     }
@@ -159,6 +183,10 @@ def fetch_events(limit: int = 6) -> list[dict]:
         cells = [text(td) for td in tr.select("td,th")]
         if len(cells) < 3:
             continue
+        # The feed keeps a closure for a while after it happens; a card that
+        # lists a date already gone reads as an invitation to act on it.
+        if parse_psx_date(cells[2]) and parse_psx_date(cells[2]) < date.today():
+            continue
         sym, _, name = cells[0].partition(" ")
         rows.append({"sym": sym, "name": name, "payout": cells[1], "closure": cells[2]})
         if len(rows) == limit:
@@ -170,6 +198,19 @@ def fetch_events(limit: int = 6) -> list[dict]:
             if len(cells) >= 3:
                 meetings.append({"sym": cells[0].split(" ")[0], "type": cells[1], "date": cells[2]})
     return [{"closures": rows, "meetings": meetings[:4]}][0]
+
+
+MONTHS = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
+
+
+def parse_psx_date(raw: str) -> date | None:
+    """'24 Sept 2026' -> date(2026, 9, 24). None when the shape is unfamiliar."""
+    m = re.match(r"(\d{1,2})\s+([A-Za-z]{3,})\.?\s+(\d{4})", raw.strip())
+    if not m:
+        return None
+    month = MONTHS.get(m.group(2)[:3].lower())
+    return date(int(m.group(3)), month, int(m.group(1))) if month else None
 
 
 def payout_words(raw: str) -> tuple[str, str]:
@@ -340,7 +381,8 @@ def market_card(m: dict, out: Path, day: date) -> None:
         panel(img, (64, y, W - 64, y + 84))
         d = ImageDraw.Draw(img)
         d.text((92, y + 16), "Most active", font=med(22), fill=SLATE)
-        d.text((92, y + 44), f"{sym}  {pct}  ·  {shares}", font=bold(26), fill=WHITE)
+        line = "  ·  ".join(part for part in (f"{sym}  {pct}", shares) if part.strip())
+        d.text((92, y + 44), line, font=bold(26), fill=WHITE)
         y += 108
     # A brief with only one breadth line leaves the lower third empty; the
     # session's own "what matters" lines fill it without inventing anything.
