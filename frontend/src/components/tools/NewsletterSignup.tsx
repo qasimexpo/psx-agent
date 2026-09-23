@@ -18,10 +18,16 @@ export default function NewsletterSignup({
   source,
   className = "",
   compact = false,
+  dense = false,
+  onDone,
 }: {
   source: string;
   className?: string;
   compact?: boolean;
+  /** Field and button on one line, and no hint line. For tight spaces. */
+  dense?: boolean;
+  /** Called once an address has been stored, for callers that remember it. */
+  onDone?: () => void;
 }) {
   const fieldId = useId();
   const [email, setEmail] = useState("");
@@ -41,6 +47,7 @@ export default function NewsletterSignup({
       await subscribeToNewsletter(email.trim(), honeypot ? "bot" : source);
       setState("done");
       trackEvent("newsletter_signup", { source });
+      onDone?.();
     } catch (err) {
       setState("idle");
       setError(err instanceof Error ? err.message : "Could not save your address.");
@@ -50,15 +57,17 @@ export default function NewsletterSignup({
   if (state === "done") {
     return (
       <div
-        className={`flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 ${className}`}
+        data-newsletter-form
+        className={`flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 ${dense ? "p-3" : "p-4"} ${className}`}
         role="status"
       >
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
         <div className="text-sm">
           <p className="font-semibold text-navy-900">You are on the list.</p>
           <p className="mt-1 text-slate-600">
-            The first issue goes out once the newsletter launches. Every email has an
-            unsubscribe link, and your address is never shared or sold.
+            {dense
+              ? "The first issue goes out once the newsletter launches. Unsubscribe in one click."
+              : "The first issue goes out once the newsletter launches. Every email has an unsubscribe link, and your address is never shared or sold."}
           </p>
         </div>
       </div>
@@ -66,14 +75,14 @@ export default function NewsletterSignup({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={className} noValidate>
+    <form data-newsletter-form onSubmit={handleSubmit} className={className} noValidate>
       {!compact ? (
         <label htmlFor={fieldId} className="mb-2 block text-sm font-semibold text-navy-900">
           Get the daily brief by email
         </label>
       ) : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className={dense ? "flex gap-2" : "flex flex-col gap-2 sm:flex-row"}>
         <div className="relative flex-1">
           <Mail
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -110,12 +119,14 @@ export default function NewsletterSignup({
         <button
           type="submit"
           disabled={state === "sending"}
-          className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className={`focus-ring inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-500 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 ${
+            dense ? "px-4 py-2.5" : "px-5 py-2.5"
+          }`}
         >
           {state === "sending" ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              Subscribing
+              {dense ? null : "Subscribing"}
             </>
           ) : (
             "Subscribe"
@@ -128,7 +139,7 @@ export default function NewsletterSignup({
           <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
           {error}
         </p>
-      ) : (
+      ) : dense ? null : (
         <p className="mt-2 text-xs text-slate-500">
           One email per trading day: the market brief and what is scheduled. No tips, no
           spam, unsubscribe in one click.
