@@ -19,7 +19,7 @@ import os
 import random
 import re
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
@@ -183,9 +183,12 @@ def fetch_events(limit: int = 6) -> list[dict]:
         cells = [text(td) for td in tr.select("td,th")]
         if len(cells) < 3:
             continue
-        # The feed keeps a closure for a while after it happens; a card that
-        # lists a date already gone reads as an invitation to act on it.
-        if parse_psx_date(cells[2]) and parse_psx_date(cells[2]) < date.today():
+        # The feed keeps a closure for a while after it happens, and a closure
+        # is unactionable two business days before it: PSX settles at T+2, so
+        # buying after the last settling day does not put you on the register.
+        # Either way the row reads as an invitation to act on something gone.
+        closes = parse_psx_date(cells[2])
+        if closes and last_buying_day(closes) < date.today():
             continue
         sym, _, name = cells[0].partition(" ")
         rows.append({"sym": sym, "name": name, "payout": cells[1], "closure": cells[2]})
@@ -202,6 +205,22 @@ def fetch_events(limit: int = 6) -> list[dict]:
 
 MONTHS = {m: i for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
+
+
+def last_buying_day(closure: date) -> date:
+    """The last day a purchase still settles in time for a book closure.
+
+    PSX settles two business days after the trade, so a trade on this day
+    settles on the closure date itself and puts the buyer on the register.
+    Weekends only: exchange holidays are not in the data collected here, so a
+    holiday in the window makes this a day or two optimistic.
+    """
+    day, left = closure, 2
+    while left:
+        day -= timedelta(days=1)
+        if day.weekday() < 5:  # Monday is 0, Saturday is 5
+            left -= 1
+    return day
 
 
 def parse_psx_date(raw: str) -> date | None:
