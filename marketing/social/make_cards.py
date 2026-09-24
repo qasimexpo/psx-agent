@@ -203,6 +203,43 @@ def fetch_events(limit: int = 6) -> list[dict]:
     return [{"closures": rows, "meetings": meetings[:4]}][0]
 
 
+#: A ticker trading ex-entitlement: FIL becomes FILNC, LUCK becomes LUCKXD.
+#: The exchange feed carries no company name for these, so the site shows the
+#: symbol in both fields. They are the same company twice, never a mover worth
+#: naming on a card.
+EX_ENTITLEMENT = re.compile(r"(XD|XB|XR|NC|WU)$")
+
+
+def fetch_limits(floor: float = 9.5) -> list[dict]:
+    """Companies that stopped at the session's price cap, biggest move first.
+
+    PSX limits how far a share may move in one session, so several names
+    halting within half a point of the same figure is the cap doing its job
+    rather than a coincidence. Read from the site's own movers panels: below
+    the floor a name is an ordinary mover and does not belong on this card.
+    """
+    home = soup("/")
+    rows: list[dict] = []
+    for heading in ("Top gainers", "Top losers"):
+        for sym, pct in movers_from_home(home, heading, limit=5):
+            if abs(float(pct.rstrip("%"))) < floor or EX_ENTITLEMENT.search(sym):
+                continue
+            s = fetch_stock(sym)
+            if s["name"] == sym:  # no company name in the feed; see above
+                continue
+            move, _, _ = s["change"].partition(" ")
+            rows.append({
+                "sym": sym,
+                "name": s["name"],
+                "price": s["price"],
+                "pct": pct,
+                "move": move.lstrip("+-−"),
+                "badges": s["badges"],
+            })
+    rows.sort(key=lambda r: abs(float(r["pct"].rstrip("%"))), reverse=True)
+    return rows
+
+
 MONTHS = {m: i for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
 
@@ -572,6 +609,27 @@ def events_card(out: Path, events: dict, day: date) -> None:
             y += 38
     footer(img, "smartsarmaya.com/#events", "From the PSX data portal. Educational, not financial advice.")
     save(img, out, f"events-{day.isoformat()}.jpg")
+
+
+def limits_card(out: Path, rows: list[dict], day: date) -> None:
+    """The session's capped shares: the exchange's own trading limit, at work."""
+    img = base(29)
+    d = header(img, f"PSX · {day.strftime('%d %B %Y')} · daily price caps")
+    d.text((64, 196), "Stopped at", font=bold(84), fill=WHITE)
+    d.text((64, 288), "the limit", font=bold(84), fill=MINT)
+    d.text((64, 406), "How far a share may move in one session is capped.", font=reg(26), fill=SLATE2)
+    y = 466
+    for r in rows[:5]:
+        panel(img, (64, y, W - 64, y + 118))
+        d = ImageDraw.Draw(img)
+        d.text((92, y + 20), r["sym"], font=bold(34), fill=WHITE)
+        d.text((92, y + 66), shorten(r["name"], 34), font=reg(23), fill=SLATE)
+        d.text((W - 92, y + 24), r["pct"].replace("-", "−"), font=bold(30), fill=tone(r["pct"]), anchor="rm")
+        d.text((W - 92, y + 74), f"Rs {r['price']}  ·  Rs {r['move']} move", font=reg(23), fill=SLATE2, anchor="rm")
+        y += 134
+    d.text((64, y + 8), "A cap is a trading limit, not a verdict on the company.", font=reg(22), fill=SLATE2)
+    footer(img, "smartsarmaya.com", "From PSX data, read intraday. Educational, not financial advice.")
+    save(img, out, f"limits-{day.isoformat()}.jpg")
 
 
 def shorten(s: str, n: int) -> str:
