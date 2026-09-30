@@ -63,8 +63,12 @@ KMI_INDEX = "KMIALLSHR"
 KMI30_INDEX = "KMI30"
 KSE100_INDEX = "KSE100"
 
+#: How long a portal key is reused before a fresh one is fetched.
+KEY_TTL = 600
+
 _cache: dict[str, tuple[Any, float]] = {}
 _last_call_at = 0.0
+_portal_key_cache: tuple[str, float] | None = None
 
 
 class PsxUnavailableError(RuntimeError):
@@ -80,6 +84,36 @@ def _pace() -> None:
     if elapsed < POLITE_DELAY:
         time.sleep(POLITE_DELAY - elapsed)
     _last_call_at = time.time()
+
+
+def _portal_key(*, refresh: bool = False) -> str:
+    """The key the portal's own pages send with every data request.
+
+    Since late September 2026 the portal embeds `window.__ps = {"_k": ...}` in
+    its HTML and its script attaches that value as an X-Req-Id header to each
+    AJAX call. Without it every data endpoint fails - 404 for a plain request,
+    403 for one that looks like AJAX - while ordinary pages still load. That
+    change is what emptied the site: /market-watch, /payouts, /calendar and the
+    time series all went at once. The tables behind them did not change.
+    """
+    global _portal_key_cache
+    now = time.time()
+    if not refresh and _portal_key_cache and now - _portal_key_cache[1] < KEY_TTL:
+        return _portal_key_cache[0]
+    _pace()
+    html = requests.get(f"{BASE}/", headers=HEADERS, timeout=TIMEOUT).text
+    match = re.search(r"window\.__ps\s*=\s*(\{.*?\});", html, re.S)
+    key = ""
+    if match:
+        try:
+            key = str(json.loads(match.group(1)).get("_k") or "")
+        except ValueError:
+            key = ""
+    if not key:
+        # Worth shouting about: every data call after this will fail.
+        logger.warning("PSX portal key not found on the home page; the scheme may have changed again.")
+    _portal_key_cache = (key, now)
+    return key
 
 
 def _request(
@@ -98,15 +132,23 @@ def _request(
     failure would empty a whole section of the site.
     """
     url = f"{BASE}{path}"
-    headers = AJAX_HEADERS if method == "POST" or data is not None else HEADERS
     last_error: Exception | None = None
+    stale_key = False
 
     for attempt in range(retries):
-        _pace()
         try:
+            # Every caller of this function hits a data endpoint, and all of
+            # them now need the AJAX marker plus the portal key.
+            headers = {**AJAX_HEADERS, "X-Req-Id": _portal_key(refresh=stale_key)}
+            stale_key = False
+            _pace()
             response = requests.request(
                 method, url, data=data, headers=headers, timeout=timeout
             )
+            # A key that has expired reads as a refusal, so fetch a fresh one
+            # before the retry rather than repeating the same rejected call.
+            if response.status_code in (403, 404):
+                stale_key = True
             # 469 is DOSarrest's block code; retrying immediately makes it worse.
             if response.status_code == 469:
                 raise PsxUnavailableError(f"PSX blocked the request to {path} (469).")
