@@ -4,8 +4,8 @@ Two things get deployed, and they are independent:
 
 | Piece | Runs on | What it does |
 | --- | --- | --- |
-| The site | Vercel | Serves pages, reads Neon, runs the two AI tools |
-| The pipeline | GitHub Actions | Fetches PSX data and writes to Neon on a schedule |
+| The site | Vercel | Serves pages, reads Supabase, runs the two AI tools |
+| The pipeline | GitHub Actions | Fetches PSX data and writes to Supabase on a schedule |
 
 They only meet at the database. If the pipeline stops, the site keeps serving
 the last good data. If the site is down, the pipeline still collects.
@@ -50,7 +50,7 @@ Preview and Development for each.
 
 | Name | Value | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | your Neon pooled connection string, database `psx` | Secret. Use the **pooled** endpoint, the one with `-pooler` in the host. |
+| `DATABASE_URL` | your Supabase **transaction pooler** string (port `6543`) | Secret. Never the direct `db.<ref>.supabase.co` host: it is IPv6-only. The pipeline uses the session pooler (`5432`) via the `SUPABASE_DATABASE_URL` repo secret. |
 | `GROQ_API_KEY` | `gsk_...` | Secret. Powers the portfolio audit and stock analyser. |
 | `GEMINI_API_KEY` | `AQ.Ab8RN6...` | Secret. Fallback when Groq is unavailable. |
 | `GROQ_MODEL_FAST` | `openai/gpt-oss-20b` | |

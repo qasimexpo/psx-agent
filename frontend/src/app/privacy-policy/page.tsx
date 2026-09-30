@@ -192,10 +192,11 @@ export default function PrivacyPolicyPage() {
                   </td>
                 </tr>
                 <tr className="border-t border-slate-100">
-                  <td className="px-3 py-2.5 font-semibold text-navy-900">Neon</td>
-                  <td className="px-3 py-2.5">Database for market data and published picks</td>
+                  <td className="px-3 py-2.5 font-semibold text-navy-900">Supabase</td>
+                  <td className="px-3 py-2.5">Database for market data, published picks and newsletter subscriptions</td>
                   <td className="px-3 py-2.5">
-                    Stock prices, indicators and picks only. No visitor data, no portfolios
+                    Stock prices, indicators and picks, plus the email address of anyone who
+                    subscribes to the newsletter. No portfolios
                   </td>
                 </tr>
                 <tr className="border-t border-slate-100">

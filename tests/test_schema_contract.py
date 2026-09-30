@@ -114,7 +114,7 @@ def test_every_referenced_column_exists(blocks: list[str]) -> None:
 def test_every_query_is_valid_postgres(blocks: list[str]) -> None:
     """Parse each query as PostgreSQL.
 
-    The frontend talks to Neon over the wire, so a syntax error would only show
+    The frontend talks to Postgres over the wire, so a syntax error would only show
     up at runtime as an empty section. Interpolations are swapped for numbered
     bind parameters first, which is what the driver sends anyway.
     """

@@ -1,6 +1,5 @@
 import "server-only";
 
-import { neon } from "@neondatabase/serverless";
 import { Pool } from "pg";
 
 /**
@@ -16,23 +15,22 @@ import { Pool } from "pg";
  * it. Unlike `query`, it propagates failures, since a signup that silently
  * does nothing is worse than an error the caller can report.
  *
- * Two drivers are supported. A Neon host uses their HTTP driver, which is what
- * production runs on. Any other Postgres host uses node-postgres, so the site
- * can be run locally against a plain Postgres instance without a Neon account.
+ * Production runs on Supabase through its transaction-mode pooler (port 6543),
+ * which suits serverless: each function instance holds a small pool and the
+ * pooler multiplexes them onto a few real connections. node-postgres sends
+ * unnamed statements, which that mode supports. Any plain Postgres works the
+ * same way, including a local one.
  */
 
 const connectionString = (process.env.DATABASE_URL ?? "").trim();
-const isNeonHost = /\.neon\.(tech|build)/.test(connectionString);
 
 type Row = Record<string, unknown>;
-
-const neonSql = connectionString && isNeonHost ? neon(connectionString) : null;
 
 // Pooled across hot reloads in development, otherwise every edit leaks a pool.
 const globalForPg = globalThis as unknown as { smartsarmayaPool?: Pool };
 
 function getPool(): Pool | null {
-  if (!connectionString || isNeonHost) return null;
+  if (!connectionString) return null;
   if (!globalForPg.smartsarmayaPool) {
     globalForPg.smartsarmayaPool = new Pool({
       connectionString,
@@ -63,9 +61,6 @@ async function runQuery<T>(
   strings: TemplateStringsArray,
   values: unknown[],
 ): Promise<T[]> {
-  if (neonSql) {
-    return (await neonSql(strings, ...values)) as T[];
-  }
   const pool = getPool();
   if (!pool) return [];
   const result = await pool.query(toParameterised(strings, values), values);
@@ -74,9 +69,9 @@ async function runQuery<T>(
 
 /**
  * A failed read degrades to an empty result so one bad section cannot take the
- * page down. Neon's HTTP endpoint occasionally fails to connect on the first
- * try, and an empty section is indistinguishable from missing data, so a
- * transient failure is retried once before giving up.
+ * page down. A pooled connection occasionally fails on the first try, and an
+ * empty section is indistinguishable from missing data, so a transient
+ * failure is retried once before giving up.
  */
 async function query<T = Row>(
   strings: TemplateStringsArray,
