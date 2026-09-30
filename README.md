@@ -20,7 +20,7 @@ day, so [the track record](https://www.smartsarmaya.com/track-record) is public,
 Nothing is on a paid tier.
 
 ```
-GitHub Actions (cron)          Neon Postgres            Vercel
+GitHub Actions (cron)        Supabase Postgres          Vercel
   python -m pipeline.run  ──▶   stocks, picks,   ◀──  Next.js server
   market / events / picks       briefs, events         components read
   brief / technicals            news, tracking         the database directly
@@ -64,7 +64,7 @@ levels from closes, not intraday pivots, and the site says so.
 pipeline/            Python. Runs only in GitHub Actions.
   psx.py             PSX Data Portal client
   indicators.py      Technical indicators from end-of-day closes
-  db.py              Neon schema and writes
+  db.py              Postgres schema and writes
   llm.py             Groq with Gemini fallback
   news.py            Google News RSS
   prompts.py         System prompts
@@ -72,7 +72,7 @@ pipeline/            Python. Runs only in GitHub Actions.
   run.py             CLI entry point for every job
 tests/               Guard tests for the pick pipeline
 frontend/            Next.js 16 App Router, deployed to Vercel
-  src/lib/db.ts      Read-only Neon queries used by server components
+  src/lib/db.ts      Postgres queries used by server components
   src/app/api/       Route handlers for the two interactive tools
 .github/workflows/   Schedules and CI
 ```
@@ -81,7 +81,9 @@ frontend/            Next.js 16 App Router, deployed to Vercel
 
 ### 1. Database
 
-Create a free project at [neon.tech](https://neon.tech) and copy the pooled connection string.
+Create a free project at [supabase.com](https://supabase.com) and copy a **pooler** connection string
+(Connect -> Connection string). `python -m pipeline.run health` creates the schema and locks
+the tables away from Supabase's auto-generated REST API.
 
 ### 2. Pipeline
 

@@ -1,7 +1,7 @@
-"""Neon Postgres schema and write helpers for the SmartSarmaya pipeline.
+"""Postgres schema and write helpers for the SmartSarmaya pipeline.
 
 The pipeline is the only writer. The Next.js app on Vercel reads these tables
-directly over the Neon HTTP driver, so every page view is a plain indexed
+directly through a connection pooler, so every page view is a plain indexed
 SELECT with no Python process in the path.
 
 Schema
@@ -56,7 +56,7 @@ logger = logging.getLogger("smartsarmaya.db")
 
 
 class DatabaseUnavailableError(RuntimeError):
-    """Raised when DATABASE_URL is missing or Neon cannot be reached."""
+    """Raised when DATABASE_URL is missing or the database cannot be reached."""
 
 
 class Base(DeclarativeBase):
@@ -387,7 +387,7 @@ def _close_rest_api(conn) -> None:
     connections this project makes own the tables, and an owner bypasses RLS,
     so the site and the pipeline are unaffected. The grants are revoked too,
     so a policy added carelessly later still opens nothing. On a host without
-    these roles (Neon, local Postgres) only the RLS half applies, harmlessly.
+    these roles (a plain or local Postgres) only the RLS half applies, harmlessly.
     """
     for table in Base.metadata.sorted_tables:
         conn.execute(text(f'ALTER TABLE "{table.name}" ENABLE ROW LEVEL SECURITY'))
@@ -508,7 +508,7 @@ def _upsert(session: Session, model, rows: list[dict[str, Any]], key: list[str])
 
     Uses the Postgres ON CONFLICT form in production. The portable fallback
     keeps the pipeline runnable against SQLite, which is how it is tested
-    without Neon credentials.
+    without database credentials.
     """
     if not rows:
         return 0

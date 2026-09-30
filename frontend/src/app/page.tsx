@@ -202,7 +202,7 @@ function SetupNotice() {
       <div className="card mx-auto max-w-2xl p-8">
         <h1 className="text-2xl font-bold text-navy-900">SmartSarmaya is not configured yet</h1>
         <p className="mt-3 leading-relaxed text-slate-600">
-          The site reads market data from a Neon Postgres database that the pipeline fills. Set the{" "}
+          The site reads market data from a Postgres database that the pipeline fills. Set the{" "}
           <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm">DATABASE_URL</code>{" "}
           environment variable, then run the pipeline once to populate it.
         </p>
