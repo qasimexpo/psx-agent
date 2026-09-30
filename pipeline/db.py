@@ -307,9 +307,16 @@ def get_database_url() -> str:
     url = (os.environ.get("DATABASE_URL") or "").strip()
     if not url:
         raise DatabaseUnavailableError("Missing required environment variable: DATABASE_URL")
-    # SQLAlchemy 2 wants the psycopg2 dialect spelled out for some Neon URLs.
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
+    # Name the driver rather than leaving SQLAlchemy to choose one. 2.1 changed
+    # the default DBAPI for a bare postgresql:// URL from psycopg2 to psycopg 3,
+    # which is not a dependency here, and because requirements.txt allowed any
+    # 2.x every scheduled run died on ModuleNotFoundError the day 2.1 shipped -
+    # no commit of ours involved. An explicit driver cannot be moved that way.
+    # A URL that already names one, or points at SQLite, is left alone.
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
 
 

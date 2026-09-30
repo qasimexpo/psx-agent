@@ -3,7 +3,10 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 feedparser>=6.0.11
 python-dotenv>=1.0.0
-SQLAlchemy>=2.0.0
+# Capped below 2.1: it makes psycopg 3 the default DBAPI for postgresql://
+# URLs. get_database_url names psycopg2 explicitly so the cap is belt and
+# braces, but 2.1 is otherwise unvalidated here - upgrade deliberately.
+SQLAlchemy>=2.0.0,<2.1
 psycopg2-binary>=2.9.9
 groq>=0.9.0
 # OAuth 1.0a signing for the X API. Only imported when X credentials are set,
