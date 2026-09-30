@@ -429,12 +429,20 @@ def fetch_index_snapshot(index: str = KSE100_INDEX) -> dict[str, Any]:
 
     if ticks:
         value = ticks[-1][1]
+        as_of = ticks[-1][0].date()
         # Sample the intraday curve down to a chart-friendly number of points.
         step = max(1, len(ticks) // 60)
         sparkline = [round(price, 2) for _, price, _ in ticks[::step]][-60:]
     else:
+        # Without ticks the freshest number is the last daily close, and it
+        # belongs to that close's day, not to today. Returning the day lets the
+        # caller file it there. On 30 Sept 2026 an empty intraday response at
+        # noon was stored as today's figure: the site showed the 29th's close
+        # and the 29th's -0.48% while the market was up 0.8%.
         value = eod[-1][1]
+        as_of = eod[-1][0]
         sparkline = [round(close, 2) for _, close, _ in eod[-60:]]
+        logger.warning("No intraday ticks for %s; using the %s close.", index, as_of)
 
     previous_close = None
     if eod:
@@ -447,6 +455,7 @@ def fetch_index_snapshot(index: str = KSE100_INDEX) -> dict[str, Any]:
 
     return {
         "name": index,
+        "day": as_of,
         "value": round(value, 2),
         "change": round(change, 2),
         "change_pct": round(change_pct, 2),
