@@ -100,7 +100,9 @@ jobs:
 
       - name: Run ${{ steps.resolve.outputs.job }}
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Supabase since 30 Sept 2026. secrets.DATABASE_URL still holds the
+          # old Neon string, kept only until its history can be exported.
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SITE_URL: ${{ vars.SITE_URL || 'https://www.smartsarmaya.com' }}
