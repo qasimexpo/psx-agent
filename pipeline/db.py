@@ -369,6 +369,44 @@ _INDEX_STATEMENTS = (
 )
 
 
+#: The roles Supabase's generated REST API runs requests as. `anon` is what
+#: anyone holding the publishable key gets, and that key is public by design.
+_API_ROLES = ("anon", "authenticated")
+
+
+def _close_rest_api(conn) -> None:
+    """Keep every table out of reach of a hosted provider's auto-generated API.
+
+    Supabase serves the public schema over PostgREST and grants its API roles
+    full rights on new tables by default. Nothing here uses that API - the site
+    and the pipeline speak Postgres directly - so it is pure exposure, and it
+    was measured: before this ran, the publishable key alone could read every
+    subscriber's email and confirm token and insert rows into the table.
+
+    Row level security with no policies denies the API roles everything. The
+    connections this project makes own the tables, and an owner bypasses RLS,
+    so the site and the pipeline are unaffected. The grants are revoked too,
+    so a policy added carelessly later still opens nothing. On a host without
+    these roles (Neon, local Postgres) only the RLS half applies, harmlessly.
+    """
+    for table in Base.metadata.sorted_tables:
+        conn.execute(text(f'ALTER TABLE "{table.name}" ENABLE ROW LEVEL SECURITY'))
+    present = [
+        role for (role,) in conn.execute(
+            text("SELECT rolname FROM pg_roles WHERE rolname = ANY(:roles)"),
+            {"roles": list(_API_ROLES)},
+        )
+    ]
+    if not present:
+        return
+    roles = ", ".join(present)
+    conn.execute(text(f"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {roles}"))
+    conn.execute(text(f"REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {roles}"))
+    # And for tables created from now on, which would otherwise inherit grants.
+    conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM {roles}"))
+    conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {roles}"))
+
+
 def _migrate_legacy() -> None:
     """Bring a database created by the previous version up to this schema.
 
@@ -447,6 +485,11 @@ def init_db() -> None:
                     conn.execute(text(statement))
                 except SQLAlchemyError as exc:
                     logger.debug("Index statement skipped (%s): %s", statement, exc)
+        # Its own transaction, and never swallowed: a lockdown that fails
+        # quietly is worse than a job that stops and says so.
+        if engine.dialect.name == "postgresql":
+            with engine.begin() as conn:
+                _close_rest_api(conn)
         logger.info("Database schema is ready.")
     except SQLAlchemyError:
         logger.exception("Failed to initialise the database schema.")
