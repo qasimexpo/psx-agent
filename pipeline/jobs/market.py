@@ -99,7 +99,9 @@ def run() -> dict[str, int]:
         index = psx.fetch_index_snapshot(psx.KSE100_INDEX)
         db.upsert_index_snapshot(
             name=index["name"],
-            day=now.date(),
+            # The day the figure belongs to, which is not today when the
+            # intraday feed was empty and the last close was used instead.
+            day=index["day"],
             value=index["value"],
             change=index["change"],
             change_pct=index["change_pct"],
