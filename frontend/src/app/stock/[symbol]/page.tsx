@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArrowLeft, ShieldCheck, TrendingUp } from "lucide-react";
 import {
   getEventsFor,
@@ -102,7 +102,14 @@ export default async function StockPage({
   if (!clean) notFound();
 
   const stock = await getStock(clean);
-  if (!stock) notFound();
+  if (!stock) {
+    // The pipeline files LUCKXD under LUCK now, so an ex-entitlement ticker
+    // has no row of its own. Its URL may still be linked or indexed from the
+    // weeks it had one; send that to the company rather than to a 404.
+    const parent = parentSymbol(clean, clean);
+    if (parent && (await getStock(parent))) permanentRedirect(`/stock/${parent}`);
+    notFound();
+  }
 
   const parentTicker = parentSymbol(clean, stock.name);
   const [note, events, peers, parent] = await Promise.all([
