@@ -17,15 +17,19 @@ name: SmartSarmaya pipeline
 
 on:
   schedule:
-    - cron: "0,30 4-11 * * 1-5"   # market: quotes, movers, index
-    - cron: "0 3 * * *"           # events: dividends, meetings, news
-    - cron: "45 3 * * 1-5"        # brief: morning edition
-    - cron: "15 4 * * 1-5"        # picks: Top Shariah-compliant picks
-    - cron: "15 11 * * 1-5"       # brief: closing edition
-    - cron: "0 12 * * 1-5"        # technicals: end-of-day indicators
-    - cron: "30 12 * * 1-5"       # scorecard: mark open picks to market
-    - cron: "0 20 * * *"          # stocks: AI notes for stock pages
-    - cron: "0 13 * * *"          # monitor: alert if any content has gone stale
+    # Minutes sit off :00/:15/:30/:45 on purpose. GitHub delays and drops
+    # scheduled runs under load, worst at the top of the hour, and this repo
+    # lost whole days of runs that way (23 Sept, 1 Oct 2026). The case map in
+    # 'Resolve job' matches these strings exactly, so change both together.
+    - cron: "7,37 4-11 * * 1-5"   # market: quotes, movers, index
+    - cron: "3 3 * * *"           # events: dividends, meetings, news
+    - cron: "47 3 * * 1-5"        # brief: morning edition
+    - cron: "17 4 * * 1-5"        # picks: Top Shariah-compliant picks
+    - cron: "17 11 * * 1-5"       # brief: closing edition
+    - cron: "7 12 * * 1-5"        # technicals: end-of-day indicators
+    - cron: "37 12 * * 1-5"       # scorecard: mark open picks to market
+    - cron: "7 20 * * *"          # stocks: AI notes for stock pages
+    - cron: "7 13 * * *"          # monitor: alert if any content has gone stale
   workflow_dispatch:
     inputs:
       job:
@@ -79,15 +83,15 @@ jobs:
         run: |
           if [ -n "$SCHEDULE" ]; then
             case "$SCHEDULE" in
-              "0,30 4-11 * * 1-5") JOB=market;     SESSION=closing ;;
-              "0 3 * * *")         JOB=events;     SESSION=closing ;;
-              "45 3 * * 1-5")      JOB=brief;      SESSION=morning ;;
-              "15 4 * * 1-5")      JOB=picks;      SESSION=closing ;;
-              "15 11 * * 1-5")     JOB=brief;      SESSION=closing ;;
-              "0 12 * * 1-5")      JOB=technicals; SESSION=closing ;;
-              "30 12 * * 1-5")     JOB=scorecard;  SESSION=closing ;;
-              "0 20 * * *")        JOB=stocks;     SESSION=closing ;;
-              "0 13 * * *")        JOB=monitor;    SESSION=closing ;;
+              "7,37 4-11 * * 1-5") JOB=market;     SESSION=closing ;;
+              "3 3 * * *")         JOB=events;     SESSION=closing ;;
+              "47 3 * * 1-5")      JOB=brief;      SESSION=morning ;;
+              "17 4 * * 1-5")      JOB=picks;      SESSION=closing ;;
+              "17 11 * * 1-5")     JOB=brief;      SESSION=closing ;;
+              "7 12 * * 1-5")      JOB=technicals; SESSION=closing ;;
+              "37 12 * * 1-5")     JOB=scorecard;  SESSION=closing ;;
+              "7 20 * * *")        JOB=stocks;     SESSION=closing ;;
+              "7 13 * * *")        JOB=monitor;    SESSION=closing ;;
               *)                   JOB=health;     SESSION=closing ;;
             esac
           else

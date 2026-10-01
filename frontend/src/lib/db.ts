@@ -22,7 +22,22 @@ import { Pool } from "pg";
  * same way, including a local one.
  */
 
-const connectionString = (process.env.DATABASE_URL ?? "").trim();
+/**
+ * Supabase's pooler serves two modes on one host: 5432 is session mode, where
+ * each client holds a real connection for as long as it stays open, and 6543
+ * is transaction mode, where clients share connections between statements.
+ * A serverless function that goes idle keeps its sockets open, so in session
+ * mode every warm instance pins slots it is not using. On 1 Oct 2026 the site
+ * was configured with 5432 and idle instances filled all 15 session slots,
+ * which locked the pipeline out of the database. Serverless code has no use
+ * for a session, so the port is corrected here rather than trusted to the
+ * environment variable.
+ */
+function forTransactionPooler(url: string): string {
+  return url.replace(/(\.pooler\.supabase\.com):5432\//, "$1:6543/");
+}
+
+const connectionString = forTransactionPooler((process.env.DATABASE_URL ?? "").trim());
 
 type Row = Record<string, unknown>;
 
