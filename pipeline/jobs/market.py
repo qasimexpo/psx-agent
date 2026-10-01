@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime
 
@@ -30,6 +31,29 @@ def _directory_lookup() -> dict[str, dict[str, str]]:
         return {}
 
 
+#: Suffixes the exchange appends while a company trades ex-entitlement:
+#: LUCK becomes LUCKXD after its dividend, SML becomes SMLNC, and so on.
+_EX_ENTITLEMENT = re.compile(r"([A-Z0-9]+?)(XD|XB|XR|NC|WU)")
+
+
+def _company_symbol(symbol: str, directory: dict, listed: set[str]) -> str:
+    """The company's own symbol for a ticker that may carry a suffix.
+
+    For two or three weeks around every book closure the exchange lists a
+    company only under its suffixed ticker - LUCKXD, never LUCK - while its
+    directory entry, its name and its whole price history stay under LUCK.
+    Filed as listed, the company's page and picks vanished for that window:
+    on 1 Oct 2026 a fresh database had no LUCK, ISL, INDU, COLG, FCCL or PSX,
+    exactly the names in the news. So a suffixed ticker is filed under its
+    base symbol, but only when the directory knows that base and the base is
+    not also trading in its own right; otherwise it is left as it came.
+    """
+    match = _EX_ENTITLEMENT.fullmatch(symbol)
+    if match and match.group(1) in directory and match.group(1) not in listed:
+        return match.group(1)
+    return symbol
+
+
 def run() -> dict[str, int]:
     """Refresh quotes, movers, sector stats and the KSE-100 snapshot."""
     db.init_db()
@@ -39,9 +63,10 @@ def run() -> dict[str, int]:
     snapshot = psx.fetch_market_watch()
     directory = _directory_lookup()
 
+    listed = {item["symbol"] for item in snapshot}
     rows = []
     for item in snapshot:
-        symbol = item["symbol"]
+        symbol = _company_symbol(item["symbol"], directory, listed)
         meta = directory.get(symbol, {})
         rows.append(
             {
@@ -79,6 +104,7 @@ def run() -> dict[str, int]:
         buckets = psx.fetch_performers()
         for items in buckets.values():
             for item in items:
+                item["symbol"] = _company_symbol(item["symbol"], directory, listed)
                 item["name"] = names.get(item["symbol"], item["symbol"])
         mover_count = db.replace_movers(buckets, halal)
         logger.info("Stored %s movers.", mover_count)
