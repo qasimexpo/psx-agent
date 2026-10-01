@@ -389,8 +389,17 @@ def _close_rest_api(conn) -> None:
     so a policy added carelessly later still opens nothing. On a host without
     these roles (a plain or local Postgres) only the RLS half applies, harmlessly.
     """
-    for table in Base.metadata.sorted_tables:
-        conn.execute(text(f'ALTER TABLE "{table.name}" ENABLE ROW LEVEL SECURITY'))
+    # Only touch what is not already in place. ALTER TABLE and REVOKE take
+    # strong locks, and this runs at the start of every job: done blindly it
+    # deadlocked two jobs started together on 1 Oct 2026, and briefly blocked
+    # the site's reads on every run. Once applied, it now takes no locks.
+    names = [table.name for table in Base.metadata.sorted_tables]
+    for (name,) in conn.execute(
+        text("SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+             "AND NOT rowsecurity AND tablename = ANY(:names)"),
+        {"names": names},
+    ):
+        conn.execute(text(f'ALTER TABLE "{name}" ENABLE ROW LEVEL SECURITY'))
     present = [
         role for (role,) in conn.execute(
             text("SELECT rolname FROM pg_roles WHERE rolname = ANY(:roles)"),
@@ -398,6 +407,13 @@ def _close_rest_api(conn) -> None:
         )
     ]
     if not present:
+        return
+    exposed = conn.execute(
+        text("SELECT count(*) FROM information_schema.role_table_grants "
+             "WHERE table_schema = 'public' AND grantee = ANY(:roles)"),
+        {"roles": present},
+    ).scalar()
+    if not exposed:
         return
     roles = ", ".join(present)
     conn.execute(text(f"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {roles}"))
@@ -476,6 +492,35 @@ def _migrate_legacy() -> None:
 def init_db() -> None:
     """Create tables and indexes, and migrate an older database in place."""
     engine = get_engine()
+    with _schema_lock(engine):
+        _init_db(engine)
+
+
+#: Arbitrary but fixed: the advisory lock id every job takes around schema setup.
+_SCHEMA_LOCK_ID = 7_423_917_201
+
+
+@contextmanager
+def _schema_lock(engine) -> Iterator[None]:
+    """Let concurrent jobs take turns at schema setup instead of deadlocking.
+
+    Jobs overlap - a manual run beside a scheduled one, or two crons a few
+    minutes apart - and each starts with DDL. A session-level advisory lock on
+    its own connection makes the second wait for the first, which then finds
+    nothing left to do. SQLite has no such thing and needs none.
+    """
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_lock(:id)"), {"id": _SCHEMA_LOCK_ID})
+        try:
+            yield
+        finally:
+            conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": _SCHEMA_LOCK_ID})
+
+
+def _init_db(engine) -> None:
     try:
         _migrate_legacy()
         Base.metadata.create_all(bind=engine)
