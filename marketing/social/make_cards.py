@@ -611,6 +611,37 @@ def events_card(out: Path, events: dict, day: date) -> None:
     save(img, out, f"events-{day.isoformat()}.jpg")
 
 
+#: What each ex-entitlement suffix means, as the site's guide explains them.
+SUFFIX_MEANING = {"XD": "ex-dividend", "XB": "ex-bonus", "XR": "ex-rights"}
+
+
+def suffix_card(out: Path, examples: list[dict], total: int, in_index: int, day: date) -> None:
+    """The session's ex-entitlement tickers: LUCKXD and friends, decoded.
+
+    `examples` rows carry ticker, base, name, suffix and price. Only XD, XB and
+    XR are explained, because those are what the site's guide defines.
+    """
+    img = base(41)
+    d = header(img, f"PSX · {day.strftime('%d %B %Y')} · ticker suffixes")
+    d.text((64, 196), "Why LUCK is", font=bold(84), fill=WHITE)
+    d.text((64, 288), "now LUCKXD", font=bold(84), fill=MINT)
+    d.text((64, 406), f"{total} companies trade with a suffix today, {in_index} in the KSE-100.", font=reg(26), fill=SLATE2)
+    y = 466
+    for ex in examples[:5]:
+        panel(img, (64, y, W - 64, y + 118))
+        d = ImageDraw.Draw(img)
+        stem = ex["base"]
+        d.text((92, y + 20), stem, font=bold(34), fill=WHITE)
+        d.text((92 + d.textlength(stem, font=bold(34)), y + 20), ex["suffix"], font=bold(34), fill=AMBER)
+        d.text((92, y + 66), shorten(ex["name"], 34), font=reg(23), fill=SLATE)
+        d.text((W - 92, y + 24), SUFFIX_MEANING[ex["suffix"]], font=bold(28), fill=AMBER, anchor="rm")
+        d.text((W - 92, y + 74), f"Same share as {stem}  ·  Rs {ex['price']:,.2f}", font=reg(23), fill=SLATE2, anchor="rm")
+        y += 134
+    d.text((64, y + 8), "Same company, same share. The payout has already been claimed.", font=reg(22), fill=SLATE2)
+    footer(img, "smartsarmaya.com/guides/psx-ticker-suffixes-xd-xb-xr", "From PSX data. Educational, not financial advice.")
+    save(img, out, f"suffixes-{day.isoformat()}.jpg")
+
+
 def limits_card(out: Path, rows: list[dict], day: date) -> None:
     """The session's capped shares: the exchange's own trading limit, at work."""
     img = base(29)
