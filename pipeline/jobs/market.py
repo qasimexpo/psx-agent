@@ -213,6 +213,8 @@ def run_technicals(
     started = time.monotonic()
     now = datetime.now(PKT)
     updates: list[dict[str, object]] = []
+    # The same closes the indicators come from, kept for the site's charts.
+    histories: list[dict[str, object]] = []
     processed = 0
     no_history = 0
     unreachable = 0
@@ -277,14 +279,19 @@ def run_technicals(
                 "tech_at": now,
             }
         )
+        histories.append(db.history_row(symbol, series))
 
         if len(updates) >= 50:
             db.upsert_stocks(updates)
+            db.upsert_price_history(histories)
             logger.info("[%s/%s] flushed %s indicator rows.", index, len(symbols), len(updates))
             updates = []
+            histories = []
 
     if updates:
         db.upsert_stocks(updates)
+    if histories:
+        db.upsert_price_history(histories)
 
     elapsed = round(time.monotonic() - started)
     logger.info(

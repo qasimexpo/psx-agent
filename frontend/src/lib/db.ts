@@ -952,8 +952,18 @@ export async function searchSymbols(term: string, limit = 8): Promise<
   }));
 }
 
-export async function getEventsFor(symbols: string[]): Promise<Record<string, string[]>> {
-  if (!symbols.length) return {};
+export type UpcomingItem = {
+  symbol: string;
+  kind: "payout" | "meeting";
+  /** The payout ("20%(F)") or the meeting type ("AGM"). */
+  detail: string;
+  /** Book closure start for a payout, the meeting date otherwise. */
+  day: string;
+};
+
+/** Upcoming book closures and meetings for the given symbols, soonest first. */
+export async function getUpcomingFor(symbols: string[]): Promise<UpcomingItem[]> {
+  if (!symbols.length) return [];
   const upper = symbols.map((s) => s.toUpperCase());
   const payouts = await query<Row>`
     SELECT symbol, payout, book_closure_from FROM payouts
@@ -963,16 +973,54 @@ export async function getEventsFor(symbols: string[]): Promise<Record<string, st
     SELECT symbol, event_type, event_date FROM corporate_events
     WHERE symbol = ANY(${upper}) AND event_date >= CURRENT_DATE
   `;
+  const items: UpcomingItem[] = [
+    ...payouts.map((row) => ({
+      symbol: String(row.symbol),
+      kind: "payout" as const,
+      detail: String(row.payout ?? ""),
+      day: toIsoDay(row.book_closure_from),
+    })),
+    ...events.map((row) => ({
+      symbol: String(row.symbol),
+      kind: "meeting" as const,
+      detail: String(row.event_type ?? ""),
+      day: toIsoDay(row.event_date),
+    })),
+  ];
+  return items.sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/** The same, as one line of prompt context per event, keyed by symbol. */
+export async function getEventsFor(symbols: string[]): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {};
-  for (const row of payouts) {
-    const symbol = String(row.symbol);
-    out[symbol] = out[symbol] ?? [];
-    out[symbol].push(`payout ${row.payout}, book closure ${toIsoDay(row.book_closure_from)}`);
+  for (const item of await getUpcomingFor(symbols)) {
+    out[item.symbol] = out[item.symbol] ?? [];
+    out[item.symbol].push(
+      item.kind === "payout"
+        ? `payout ${item.detail}, book closure ${item.day}`
+        : `${item.detail} on ${item.day}`,
+    );
   }
-  for (const row of events) {
-    const symbol = String(row.symbol);
-    out[symbol] = out[symbol] ?? [];
-    out[symbol].push(`${row.event_type} on ${toIsoDay(row.event_date)}`);
+  return out;
+}
+
+/** Daily closes per symbol, oldest first, as kept by the technicals job. */
+export async function getPriceHistories(
+  symbols: string[],
+): Promise<Record<string, { t: string; v: number }[]>> {
+  const upper = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  if (!upper.length) return {};
+  const rows = await query<Row>`
+    SELECT symbol, series FROM price_history WHERE symbol = ANY(${upper})
+  `;
+  const out: Record<string, { t: string; v: number }[]> = {};
+  for (const row of rows) {
+    const raw = typeof row.series === "string" ? JSON.parse(row.series) : row.series;
+    out[String(row.symbol)] = (Array.isArray(raw) ? raw : []).flatMap((item: unknown) =>
+      Array.isArray(item) && typeof item[0] === "string" && Number.isFinite(Number(item[1]))
+        ? [{ t: item[0], v: Number(item[1]) }]
+        : [],
+    );
   }
   return out;
 }
