@@ -15,7 +15,8 @@ movers           top gainers / losers / most active, replaced each run
 sector_stats     advance-decline and turnover per sector
 corporate_events AGM / EOGM / board meetings
 payouts          dividend announcements and book closure windows
-news_items       Pakistan and global market headlines
+news_items       Pakistan and global market headlines, replaced each run
+news_archive     every headline ever seen, keyed by link, never deleted
 top_picks        AI picks keyed by (timeframe, sector, pick_date) so history
                  accumulates instead of being overwritten
 pick_track       per-pick entry price and running return, for the scorecard
@@ -204,6 +205,26 @@ class NewsItem(Base):
     link: Mapped[str] = mapped_column(Text, default="")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class NewsArchive(Base):
+    """Append-only copy of every headline, for studying news against prices later.
+
+    news_items holds only the current feed and is replaced each run, so without
+    this there is no history to look back on.
+    """
+
+    __tablename__ = "news_archive"
+    __table_args__ = (UniqueConstraint("link", name="uq_news_archive_link"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    region: Mapped[str] = mapped_column(String(16), index=True)  # pakistan|global
+    title: Mapped[str] = mapped_column(String(512), default="")
+    snippet: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(128), default="")
+    link: Mapped[str] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
 class TopPick(Base):
@@ -762,6 +783,36 @@ def replace_news(rows: list[dict[str, Any]]) -> int:
         session.execute(delete(NewsItem))
         _insert_many(session, NewsItem, rows)
     return len(rows)
+
+
+def archive_news(rows: list[dict[str, Any]]) -> int:
+    """Add headlines not archived before. Returns how many were new."""
+    by_link = {row["link"]: row for row in rows if row.get("link")}
+    if not by_link:
+        return 0
+    with session_scope() as session:
+        seen = set(
+            session.execute(
+                select(NewsArchive.link).where(NewsArchive.link.in_(list(by_link)))
+            ).scalars()
+        )
+        now = _utc_now()
+        fresh = [
+            {
+                "region": row["region"],
+                "title": row["title"],
+                "snippet": row["snippet"],
+                "source": row["source"],
+                "link": link,
+                "published_at": row["published_at"],
+                "first_seen_at": now,
+            }
+            for link, row in by_link.items()
+            if link not in seen
+        ]
+        # Ignore rather than insert: two overlapping jobs may archive the same link.
+        _insert_ignore(session, NewsArchive, fresh, ["link"])
+    return len(fresh)
 
 
 def upsert_top_picks(
