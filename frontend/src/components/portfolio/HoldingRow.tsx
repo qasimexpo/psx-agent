@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Sparkles, Trash2 } from "lucide-react";
 
 import {
   removeHoldingAction,
@@ -10,6 +10,7 @@ import {
   type FormState,
 } from "@/app/portfolio/actions";
 import { Delta, MiniTrend } from "@/components/charts/Trend";
+import HoldingInsight from "@/components/portfolio/HoldingInsight";
 import { HalalBadge } from "@/components/ui/Primitives";
 import type { PricePoint } from "@/lib/charts";
 import { changeClass, money, percent, signedMoney } from "@/lib/format";
@@ -19,8 +20,9 @@ const CELL = "px-3 py-3 text-right tabular";
 const INPUT = "focus-ring tabular w-24 rounded-md border border-slate-300 px-2 py-1 text-right text-sm";
 
 /**
- * One position. The stock and its trend link to the stock's full page; an
- * inline editor corrects shares or average cost.
+ * One position. Clicking the stock opens a panel with the AI recommendation
+ * for it; the trend links to the stock's full page; an inline editor corrects
+ * shares or average cost.
  */
 export default function HoldingRow({
   position,
@@ -36,6 +38,7 @@ export default function HoldingRow({
   trendChange: number | null;
 }) {
   const [editing, setEditing] = useState(false);
+  const [insight, setInsight] = useState(false);
   const [state, formAction, pending] = useActionState(
     async (prev: FormState, formData: FormData) => {
       const result = await updateHoldingAction(prev, formData);
@@ -50,17 +53,30 @@ export default function HoldingRow({
   return (
     <tr className="border-t border-slate-100 align-middle transition-colors hover:bg-slate-50/70">
       <td className="px-3 py-3">
-        <Link href={href} className="group block rounded focus-ring">
-          <span className="font-semibold text-navy-900 underline-offset-2 group-hover:text-emerald-700 group-hover:underline">
-            {position.symbol}
+        <button
+          type="button"
+          onClick={() => setInsight(true)}
+          aria-haspopup="dialog"
+          aria-label={`${position.symbol}: open the AI recommendation`}
+          className="group block rounded text-left focus-ring"
+        >
+          <span className="flex items-center gap-1.5">
+            <span className="font-semibold text-navy-900 underline-offset-2 group-hover:text-emerald-700 group-hover:underline">
+              {position.symbol}
+            </span>
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+              <Sparkles className="h-3 w-3" aria-hidden />
+              AI
+            </span>
           </span>
           <span className="block max-w-[15rem] truncate text-xs text-slate-500">
             {position.name || "—"}
           </span>
-        </Link>
+        </button>
         <div className="mt-1">
           <HalalBadge verified={position.is_kmi} />
         </div>
+        {insight ? <HoldingInsight position={position} onClose={() => setInsight(false)} /> : null}
       </td>
 
       <td className="px-3 py-3">

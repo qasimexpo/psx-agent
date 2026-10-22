@@ -7,14 +7,8 @@ import { analyzeStock, type StockResult } from "@/lib/clientApi";
 import { trackEvent } from "@/lib/analytics";
 import { changeClass, money, percent } from "@/lib/format";
 import { SectionHeading } from "@/components/ui/Primitives";
+import { VERDICT_STYLE } from "@/lib/verdicts";
 
-const VERDICT_STYLE: Record<string, string> = {
-  "BUY MORE": "bg-emerald-100 text-emerald-800 border-emerald-200",
-  HOLD: "bg-slate-100 text-slate-700 border-slate-200",
-  TRIM: "bg-amber-100 text-amber-800 border-amber-200",
-  EXIT: "bg-rose-100 text-rose-800 border-rose-200",
-  WATCH: "bg-sky-100 text-sky-800 border-sky-200",
-};
 
 export default function StockAnalyzer() {
   const [symbol, setSymbol] = useState("");
