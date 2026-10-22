@@ -122,11 +122,19 @@ export default function PrivacyPolicyPage() {
               Supabase, which runs our sign-in, holds your email address, how you signed in
               (email link or Google) and when. Our database holds a display name; for each
               stock you hold, the symbol, number of shares, average cost and when you last changed
-              it; each buy or sell you record (date, shares and price); and the stocks on your
-              watchlist. A sign-in cookie keeps you signed in. We use this only to show you your own
+              it; each buy or sell you record (date, shares and price); the stocks on your
+              watchlist; and any price alerts you set, with the email address to tell. A sign-in
+              cookie keeps you signed in. We use this only to show you your own
               portfolio. It is never sold, shared, shown to other visitors, sent to an AI provider
               or advertiser, or passed to Google Analytics. Deleting your account from the account
               page erases the sign-in, the profile and every holding immediately and permanently.
+            </li>
+            <li>
+              <strong className="text-navy-900">Statements you import.</strong> A statement PDF
+              is read in your browser and never uploaded to us. Its text, with account numbers,
+              CNIC, phone numbers and email addresses removed first, is sent to our AI provider
+              to find the holdings, and is not stored. Only the rows you confirm are saved to your
+              portfolio.
             </li>
             <li>
               <strong className="text-navy-900">Anything you email us.</strong> If you write to us,
@@ -222,7 +230,9 @@ export default function PrivacyPolicyPage() {
                   <td className="px-3 py-2.5 font-semibold text-navy-900">Groq</td>
                   <td className="px-3 py-2.5">Primary AI model provider, Llama</td>
                   <td className="px-3 py-2.5">
-                    The prompt text for your request, including symbols and quantities you entered
+                    The prompt text for your request, including symbols and quantities you
+                    entered, and the text of a statement you import with identifying numbers
+                    removed
                   </td>
                 </tr>
                 <tr className="border-t border-slate-100">

@@ -122,6 +122,12 @@ jobs:
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          # Price alert emails. Unset, alerts still fire and show on the site.
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
         run: |
           python -m pipeline.run "${{ steps.resolve.outputs.job }}" \
             --session "${{ steps.resolve.outputs.session }}"

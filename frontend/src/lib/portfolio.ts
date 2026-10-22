@@ -100,6 +100,7 @@ export async function deleteUserData(userId: string): Promise<void> {
   await mutate`DELETE FROM holdings WHERE user_id = ${userId}`;
   await mutate`DELETE FROM trades WHERE user_id = ${userId}`;
   await mutate`DELETE FROM watchlist WHERE user_id = ${userId}`;
+  await mutate`DELETE FROM price_alerts WHERE user_id = ${userId}`;
   await mutate`DELETE FROM profiles WHERE user_id = ${userId}`;
 }
 
@@ -407,4 +408,94 @@ export async function listPayoutsFor(symbols: string[]): Promise<PayoutRecord[]>
     }
   }
   return out.sort((a, b) => a.book_closure_from.localeCompare(b.book_closure_from));
+}
+
+// ---------------------------------------------------------------------------
+// price alerts
+// ---------------------------------------------------------------------------
+
+export const MAX_ALERTS = 20;
+
+export type PriceAlert = {
+  id: number;
+  symbol: string;
+  direction: "above" | "below";
+  target: number;
+  created_at: string | null;
+  triggered_at: string | null;
+  triggered_price: number | null;
+  /** The latest quote, to show how far the price is from the target. */
+  price: number | null;
+};
+
+/** Creates a one-shot alert. Like addHolding, an unknown symbol inserts nothing. */
+export async function createAlert(
+  userId: string,
+  email: string,
+  symbol: string,
+  direction: "above" | "below",
+  target: number,
+): Promise<boolean> {
+  const rows = await mutate<Row>`
+    INSERT INTO price_alerts (user_id, email, symbol, direction, target, created_at)
+    SELECT ${userId}::text, ${email}::text, symbol, ${direction}::text, ${target}::float8, NOW()
+    FROM stocks WHERE symbol = ${symbol}
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+export async function countActiveAlerts(userId: string): Promise<number> {
+  const rows = await mutate<Row>`
+    SELECT count(*) AS total FROM price_alerts WHERE user_id = ${userId} AND triggered_at IS NULL
+  `;
+  return num(rows[0]?.total) ?? 0;
+}
+
+export async function listAlerts(userId: string): Promise<PriceAlert[]> {
+  const rows = await mutate<Row>`
+    SELECT a.id, a.symbol, a.direction, a.target, a.created_at, a.triggered_at, a.triggered_price,
+           s.current_price
+    FROM price_alerts a
+    LEFT JOIN stocks s ON s.symbol = a.symbol
+    WHERE a.user_id = ${userId}
+    ORDER BY a.triggered_at DESC NULLS FIRST, a.created_at DESC
+  `;
+  return rows.map((row) => {
+    const quoted = num(row.current_price);
+    return {
+      id: num(row.id) ?? 0,
+      symbol: String(row.symbol),
+      direction: row.direction === "below" ? "below" : "above",
+      target: num(row.target) ?? 0,
+      created_at: iso(row.created_at),
+      triggered_at: iso(row.triggered_at),
+      triggered_price: num(row.triggered_price),
+      price: quoted !== null && quoted > 0 ? quoted : null,
+    };
+  });
+}
+
+export async function deleteAlert(userId: string, id: number): Promise<void> {
+  await mutate`DELETE FROM price_alerts WHERE user_id = ${userId} AND id = ${id}`;
+}
+
+// ---------------------------------------------------------------------------
+// statement import
+// ---------------------------------------------------------------------------
+
+/** Name and latest price for each listed symbol among `symbols`. */
+export async function knownSymbols(
+  symbols: string[],
+): Promise<Map<string, { name: string; price: number | null }>> {
+  if (!symbols.length) return new Map();
+  const rows = await mutate<Row>`
+    SELECT symbol, name, current_price FROM stocks WHERE symbol = ANY(${symbols})
+  `;
+  return new Map(
+    rows.map((row) => {
+      const quoted = num(row.current_price);
+      return [String(row.symbol), { name: String(row.name ?? ""), price: quoted && quoted > 0 ? quoted : null }];
+    }),
+  );
 }
