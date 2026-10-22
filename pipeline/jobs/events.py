@@ -93,6 +93,7 @@ def run() -> dict[str, int]:
         logger.exception("Payouts unavailable; keeping previous rows.")
 
     # Headlines
+    rows: list[dict] = []
     try:
         items = news.fetch_all(limit_per_region=8)
         rows = [
@@ -111,5 +112,12 @@ def run() -> dict[str, int]:
         logger.info("Stored %s headlines.", counts["news"])
     except Exception:  # noqa: BLE001 - news must never fail the whole job
         logger.exception("News refresh failed; keeping previous rows.")
+
+    # The archive is for later study; a failure here must not touch the live headlines.
+    try:
+        counts["news_archived"] = db.archive_news(rows)
+        logger.info("Archived %s new headlines.", counts["news_archived"])
+    except Exception:  # noqa: BLE001
+        logger.exception("News archive failed; live headlines are unaffected.")
 
     return counts
