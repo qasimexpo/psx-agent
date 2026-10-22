@@ -4,10 +4,11 @@ import StockDirectory from "@/components/stocks/StockDirectory";
 import { getLastPriceSync, listIndexableSymbols } from "@/lib/db";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
 
-// One minute. The page refreshes itself and has a Refresh button, and both
-// get this cached render, so a quote the market job writes every 30 minutes
-// shows up within a minute. Regenerating costs one indexed SELECT.
-export const revalidate = 60;
+// Fifteen minutes. Each regeneration is a large page counted against the
+// Hobby plan's ISR write allowance, which is already exceeded, so this stays
+// at its original interval. The sync bar shows the time of the prices this
+// cached render holds, so it never claims a fresher sync than it displays.
+export const revalidate = 900;
 
 export const metadata: Metadata = {
   title: "PSX stock directory with Shariah status",
