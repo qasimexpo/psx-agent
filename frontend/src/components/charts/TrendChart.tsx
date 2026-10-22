@@ -1,15 +1,15 @@
 "use client";
 
 import {
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
 
-import { niceTicks, toMs, type PricePoint } from "@/lib/charts";
+import { CHART_MARGIN, niceTicks, toMs, type PricePoint } from "@/lib/charts";
+
+import { useMeasuredWidth } from "./useMeasuredWidth";
 
 export type ChartSeries = { id: string; label: string; color: string; points: PricePoint[] };
 
@@ -77,22 +77,9 @@ export default function TrendChart({
   /** Shown instead of the chart when there are fewer than two days to draw. */
   emptyMessage?: string;
 }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  // Unknown until measured in the browser; the server reserves the space instead.
-  const [measured, setMeasured] = useState<number | null>(null);
+  const [wrapRef, measured] = useMeasuredWidth();
   const width = measured ?? 720;
   const [active, setActive] = useState<number | null>(null);
-
-  // Measured before the first paint, so the chart never shows at the default width.
-  useLayoutEffect(() => {
-    const element = wrapRef.current;
-    if (!element) return;
-    const measure = (value: number) => setMeasured(Math.max(280, Math.round(value)));
-    measure(element.getBoundingClientRect().width);
-    const observer = new ResizeObserver(([entry]) => measure(entry.contentRect.width));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   const lines = useMemo(
     () =>
@@ -118,7 +105,7 @@ export default function TrendChart({
   }
 
   const multi = lines.length > 1;
-  const margin = { top: 12, right: 84, bottom: 26, left: 60 };
+  const margin = CHART_MARGIN;
   const plotW = Math.max(40, width - margin.left - margin.right);
   const totalH = height + margin.top + margin.bottom;
 

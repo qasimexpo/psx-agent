@@ -18,6 +18,7 @@ import {
   relativeTime,
 } from "@/lib/format";
 import StockPriceChart from "@/components/stocks/StockPriceChart";
+import TechnicalSummary from "@/components/stocks/TechnicalSummary";
 import WatchButton from "@/components/stocks/WatchButton";
 import { Disclaimer, RangeBar } from "@/components/ui/Primitives";
 import GoogleAd from "@/components/GoogleAd";
@@ -271,6 +272,7 @@ export default async function StockPage({
         </header>
 
         <StockPriceChart symbol={clean} price={stock.current_price} quoteAt={stock.quote_at} />
+        <TechnicalSummary stock={stock} />
 
         <p className="mt-4 px-1 text-[15px] leading-relaxed text-slate-700">
           <strong className="text-navy-900">

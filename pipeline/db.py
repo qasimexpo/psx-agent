@@ -289,7 +289,7 @@ class DailyBrief(Base):
 
 
 class PriceHistory(Base):
-    """The last year of daily closes for one symbol, as [["YYYY-MM-DD", close], ...].
+    """The last year of daily closes for one symbol, as [["YYYY-MM-DD", close, volume], ...].
 
     The technicals job already downloads this to compute indicators; keeping
     it costs one row per symbol and gives the site its price charts. One JSON
@@ -768,7 +768,7 @@ PRICE_HISTORY_DAYS = 260
 
 def history_row(symbol: str, series: Iterable[tuple[date, float, int]]) -> dict[str, Any]:
     """The price_history row for a symbol's end-of-day series (oldest first)."""
-    closes = [[day.isoformat(), round(close, 2)] for day, close, _ in series]
+    closes = [[day.isoformat(), round(close, 2), int(volume)] for day, close, volume in series]
     return {
         "symbol": symbol,
         "series": closes[-PRICE_HISTORY_DAYS:],

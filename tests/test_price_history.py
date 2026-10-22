@@ -37,8 +37,8 @@ def stored() -> dict[str, list]:
 def test_history_row_keeps_the_last_year_as_iso_days():
     row = db.history_row("OGDC", series(300))
     assert len(row["series"]) == db.PRICE_HISTORY_DAYS
-    assert row["series"][0] == ["2025-02-10", 120.0]
-    assert row["series"][-1] == ["2025-10-27", 249.5]
+    assert row["series"][0] == ["2025-02-10", 120.0, 1000]
+    assert row["series"][-1] == ["2025-10-27", 249.5, 1000]
 
 
 def test_upsert_replaces_a_symbols_series(empty_db):

@@ -3,7 +3,10 @@
  * client components slice them with the same code.
  */
 
-export type PricePoint = { t: string; v: number };
+export type PricePoint = { t: string; v: number; vol?: number };
+
+/** Plot margins shared by stacked charts, so a volume panel lines up under its price chart. */
+export const CHART_MARGIN = { top: 12, right: 84, bottom: 26, left: 60 } as const;
 
 export const RANGES = [
   { key: "1M", days: 31 },
