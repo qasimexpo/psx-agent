@@ -40,3 +40,14 @@ const SYNC_TIME = new Intl.DateTimeFormat("en-PK", {
 export function formatSyncTime(iso: string): string {
   return `${SYNC_TIME.format(new Date(iso))} PKT`;
 }
+
+/**
+ * The same for any timestamp a page renders, or "—". Cached pages use this
+ * instead of "5 min ago": a relative time is frozen when the page is built
+ * and grows wrong for as long as the cache lasts; an exact time stays true.
+ */
+export function formatPkt(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const at = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(at.getTime()) ? "—" : `${SYNC_TIME.format(at)} PKT`;
+}

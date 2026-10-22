@@ -9,7 +9,10 @@ import { getBriefByDate, listBriefs } from "@/lib/db";
  * is shown here too, with its canonical pointing at its own URL, so the two
  * addresses never compete for the same text.
  */
-export const revalidate = 600;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; a dated brief is final once
+// published, and an hour covers the closing edition joining the same date.
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
   const briefs = await listBriefs(20);

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { IndexSnapshot, Quote } from "@/lib/db";
-import { changeClass, money, percent, relativeTime } from "@/lib/format";
+import { changeClass, money, percent } from "@/lib/format";
+import { formatPkt } from "@/lib/marketHours";
 import { Sparkline } from "@/components/ui/Primitives";
 
 /**
@@ -60,7 +61,7 @@ export function MarketStatus({ updatedAt }: { updatedAt: string | null }) {
       />
       {open ? "Market open" : "Market closed"}
       <span className="text-slate-400">·</span>
-      <span>Updated {relativeTime(updatedAt)}</span>
+      <span>Updated {formatPkt(updatedAt)}</span>
     </span>
   );
 }
@@ -146,7 +147,7 @@ function MarketStatusDark({ updatedAt }: { updatedAt: string | null }) {
       <span className={`h-2 w-2 rounded-full ${open ? "bg-emerald-400" : "bg-slate-500"}`} aria-hidden />
       {open ? "Market open" : "Market closed"}
       <span className="text-slate-600">·</span>
-      <span>Data updated {relativeTime(updatedAt)}</span>
+      <span>Data updated {formatPkt(updatedAt)}</span>
     </span>
   );
 }

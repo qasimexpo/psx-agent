@@ -5,7 +5,9 @@ import { DATE_PATTERN } from "@/lib/briefs";
 import { getBriefByDate, listBriefs } from "@/lib/db";
 
 /** The day's morning brief, written before the open. */
-export const revalidate = 600;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; a published brief does not change.
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
   const briefs = await listBriefs(40);

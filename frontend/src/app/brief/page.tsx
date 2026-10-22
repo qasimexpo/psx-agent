@@ -7,7 +7,9 @@ import NewsletterSignup from "@/components/tools/NewsletterSignup";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
 import { briefPath } from "@/lib/briefs";
 
-export const revalidate = 600;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; briefs publish twice a day.
+export const revalidate = 1800;
 
 export const metadata: Metadata = {
   title: "Daily PSX market brief",

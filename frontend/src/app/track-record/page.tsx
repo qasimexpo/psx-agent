@@ -9,7 +9,9 @@ import { EDITOR, SITE_URL } from "@/lib/site";
  * The public scorecard. Publishing how the picks actually performed, including
  * the losers, is the thing that separates this from every other tip site.
  */
-export const revalidate = 900;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; the scorecard updates once a day.
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Track record of our AI Shariah-compliant picks",

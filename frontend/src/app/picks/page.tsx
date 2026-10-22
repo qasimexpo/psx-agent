@@ -17,7 +17,9 @@ import { SITE_URL } from "@/lib/site";
  * page that links to all of them, and targets "halal stocks Pakistan" head-on
  * rather than leaving that query to the home page.
  */
-export const revalidate = 600;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; picks publish once a day.
+export const revalidate = 1800;
 
 export const metadata: Metadata = {
   title: "Shariah-compliant stocks in Pakistan, by sector",
