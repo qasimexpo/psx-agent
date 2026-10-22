@@ -22,7 +22,9 @@ import { SITE_URL } from "@/lib/site";
  * One page per sector. These target the searches people actually type, such as
  * "halal cement stocks in Pakistan", and they keep the home page static.
  */
-export const revalidate = 600;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; picks publish once a day.
+export const revalidate = 1800;
 
 export function generateStaticParams() {
   return PICK_SECTORS.map((sector) => ({ sector: sector.slug }));

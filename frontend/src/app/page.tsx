@@ -35,7 +35,9 @@ import {
  * engines and to the AdSense reviewer. The page refreshes on a five minute
  * timer rather than on every request.
  */
-export const revalidate = 300;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; quotes arrive every 30 minutes at most.
+export const revalidate = 900;
 
 // Sector filtering lives at /picks/[sector] rather than in a query parameter,
 // which keeps this page statically rendered and gives each sector a page search

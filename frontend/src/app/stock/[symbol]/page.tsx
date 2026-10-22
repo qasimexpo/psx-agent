@@ -15,8 +15,8 @@ import {
   money,
   percent,
   rangePosition,
-  relativeTime,
 } from "@/lib/format";
+import { formatPkt } from "@/lib/marketHours";
 import PriceAlertForm from "@/components/stocks/PriceAlertForm";
 import StockPriceChart from "@/components/stocks/StockPriceChart";
 import TechnicalSummary from "@/components/stocks/TechnicalSummary";
@@ -34,7 +34,10 @@ import { isSecondaryInstrument, parentSymbol, shortName } from "@/lib/symbols";
  * search engines to index beyond a single landing page, and they are generated
  * entirely from data the pipeline already collects.
  */
-export const revalidate = 900;
+// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
+// allowance; an hour is enough because
+// quotes change at most every 30 minutes and the price chart loads separately.
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
   // Pre-render the most liquid names; the rest render on first request.
@@ -236,7 +239,7 @@ export default async function StockPage({
                 {money(stock.change)} ({percent(stock.change_pct)})
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
-                Updated {relativeTime(stock.quote_at)}
+                Updated {formatPkt(stock.quote_at)}
               </p>
               <div className="mt-3">
                 <WatchButton symbol={clean} />
@@ -294,7 +297,7 @@ export default async function StockPage({
               <h2 className="text-lg font-bold text-navy-900">AI analysis</h2>
               <span className="badge badge-neutral">{note.verdict}</span>
               <span className="text-xs text-slate-500">
-                Refreshed {relativeTime(note.updated_at)}
+                Refreshed {formatPkt(note.updated_at)}
               </span>
             </div>
             {note.headline ? (
