@@ -1,8 +1,10 @@
 """Postgres schema and write helpers for the SmartSarmaya pipeline.
 
-The pipeline is the only writer. The Next.js app on Vercel reads these tables
+The pipeline writes the market tables. The Next.js app on Vercel reads them
 directly through a connection pooler, so every page view is a plain indexed
-SELECT with no Python process in the path.
+SELECT with no Python process in the path. The site itself writes only the
+visitor tables: subscribers, profiles and holdings. Their schema still lives
+here, so every table is created and locked down in one place.
 
 Schema
 ------
@@ -19,6 +21,9 @@ top_picks        AI picks keyed by (timeframe, sector, pick_date) so history
 pick_track       per-pick entry price and running return, for the scorecard
 daily_briefs     AI market brief, one per session per day
 stock_notes      AI written commentary for each stock detail page
+subscribers      newsletter signups (written by the site)
+profiles         one row per signed-in user (written by the site)
+holdings         each user's positions, one per symbol (written by the site)
 """
 
 from __future__ import annotations
@@ -293,6 +298,42 @@ class Subscriber(Base):
     unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class Profile(Base):
+    """A signed-in user, keyed by the Supabase Auth user id.
+
+    Identity (email, sign-in method) stays in Supabase Auth; this holds only
+    what the site shows. Deleting an account deletes this row and the user's
+    holdings outright, since nothing here is needed once they leave.
+    """
+
+    __tablename__ = "profiles"
+
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class Holding(Base):
+    """One position in a user's portfolio: a symbol, a share count and an average cost.
+
+    Buying more of a symbol already held merges into this row at a weighted
+    average price, as a broker statement would show it. Every query is scoped
+    by user_id taken from the verified session, never from the request.
+    """
+
+    __tablename__ = "holdings"
+    __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_holdings_user_symbol"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    symbol: Mapped[str] = mapped_column(String(20))
+    quantity: Mapped[float] = mapped_column(Float)
+    avg_price: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
 # --------------------------------------------------------------------------

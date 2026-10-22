@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import PriceSyncStatus from "@/components/portfolio/PriceSyncStatus";
 import StockDirectory from "@/components/stocks/StockDirectory";
-import { listIndexableSymbols } from "@/lib/db";
+import { getLastPriceSync, listIndexableSymbols } from "@/lib/db";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
 
-export const revalidate = 900;
+// One minute. The page refreshes itself and has a Refresh button, and both
+// get this cached render, so a quote the market job writes every 30 minutes
+// shows up within a minute. Regenerating costs one indexed SELECT.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "PSX stock directory with Shariah status",
@@ -13,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export default async function StocksPage() {
-  const rows = await listIndexableSymbols(400);
+  const [rows, lastSync] = await Promise.all([listIndexableSymbols(400), getLastPriceSync()]);
   const halalCount = rows.filter((row) => row.is_kmi).length;
 
   return (
@@ -25,6 +29,10 @@ export default async function StocksPage() {
           title="PSX stock directory"
           description="Live prices for the KSE-100 and every Shariah-compliant listing, grouped by sector. Each company has its own page with technicals, corporate actions and Islamic index status."
         />
+
+        <div className="mb-6">
+          <PriceSyncStatus syncedAt={lastSync} />
+        </div>
 
         {rows.length ? (
           <StockDirectory rows={rows} />

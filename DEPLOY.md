@@ -59,6 +59,9 @@ Preview and Development for each.
 | `NEXT_PUBLIC_ADSENSE_CLIENT` | `ca-pub-7107292781644653` | |
 | `NEXT_PUBLIC_ADSENSE_SLOT_TOP` | `5906848623` | |
 | `NEXT_PUBLIC_ADSENSE_SLOT_BOTTOM` | `8341440277` | |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` | Supabase → Project Settings → API. Turns accounts on; without it and the next key, /portfolio says accounts are off. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | Public by design. It grants nothing on the tables, which the pipeline locks with RLS. |
+| `SUPABASE_SECRET_KEY` | `sb_secret_...` | Secret. Used only to delete a user's sign-in when they delete their account. |
 
 > Both providers are verified working. Groq is tried first and Gemini is the
 > fallback. AI Studio now issues keys beginning `AQ.`, which only authenticate
@@ -74,6 +77,34 @@ Preview and Development for each.
 > `GROQ_MODEL_QUALITY` and `GROQ_MODEL_FAST` from
 > [console.groq.com/docs/models](https://console.groq.com/docs/models). The
 > code already falls back through several names before giving up.
+
+### Accounts (Supabase Auth)
+
+Signing in is passwordless: an emailed link, or Google. Set these up in the
+Supabase dashboard once.
+
+1. **Authentication → URL Configuration.** Site URL
+   `https://www.smartsarmaya.com`. Add these to Redirect URLs:
+   `https://www.smartsarmaya.com/auth/callback`,
+   `https://psx-agent-wyti-*-qasim-riazs-projects.vercel.app/**` (previews) and
+   `http://localhost:3000/auth/callback`.
+2. **Authentication → Emails → SMTP Settings.** Supabase's built-in sender
+   only delivers to the project's own team members, so sign-in links never
+   reach the public without a custom SMTP provider (Resend, Brevo, Amazon SES,
+   or a Google Workspace mailbox). Use a `no-reply@smartsarmaya.com` sender.
+3. **Authentication → Sign In / Providers → Google** (optional). Create an
+   OAuth client in Google Cloud Console (type Web application), with the
+   callback URL Supabase shows on this screen as an authorised redirect URI,
+   then paste the client ID and secret here.
+4. Leave the email template's link as it is. It returns to `/auth/callback`
+   with a `code`, which completes in the browser that asked for it. To let a
+   link work on a different device, change the template's link to
+   `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email`; the
+   callback handles both.
+
+The `profiles` and `holdings` tables are created by the pipeline like every
+other table, so after deploying, run any pipeline job once (Actions → Pipeline
+→ Run workflow) before the first sign-in.
 
 ---
 

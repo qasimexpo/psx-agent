@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/terms-of-service" },
 };
 
-const LAST_UPDATED = "5 September 2026";
+const LAST_UPDATED = "22 October 2026";
 
 export default function TermsOfServicePage() {
   return (
@@ -28,8 +28,8 @@ export default function TermsOfServicePage() {
           <p className="mt-3 text-sm leading-relaxed text-slate-700">
             By using {SITE_NAME} at smartsarmaya.com, including any page, tool, feed or API route
             on it, you agree to these terms. If you do not agree with any part of them, please stop
-            using the site. These terms apply whether or not you contact us, and there is nothing
-            to sign because there is no account.
+            using the site. These terms apply whether or not you create an account or contact us.
+            An account is optional, free, and yours to delete at any time from the account page.
           </p>
         </div>
 

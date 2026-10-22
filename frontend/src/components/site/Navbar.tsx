@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { BriefcaseBusiness, Menu, X } from "lucide-react";
 import { IMAGES } from "@/lib/images";
 
 const LINKS = [
@@ -15,6 +15,10 @@ const LINKS = [
   { href: "/track-record", label: "Track record" },
   { href: "/guides", label: "Guides" },
 ];
+
+// The header stays the same for everyone, so pages stay static; /portfolio
+// sends a signed-out visitor to sign in.
+const MOBILE_LINKS = [{ href: "/portfolio", label: "My portfolio" }, ...LINKS];
 
 export default function Navbar() {
   // The menu closes when a link is tapped rather than by watching the route,
@@ -49,6 +53,13 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2">
           <Link
+            href="/portfolio"
+            className="hidden items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10 focus-ring sm:inline-flex"
+          >
+            <BriefcaseBusiness className="h-4 w-4" aria-hidden />
+            My portfolio
+          </Link>
+          <Link
             href="/#audit"
             className="hidden rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 focus-ring sm:inline-flex"
           >
@@ -69,7 +80,7 @@ export default function Navbar() {
       {open ? (
         <nav className="border-t border-navy-800 bg-navy-900 px-4 pb-4 pt-2 lg:hidden">
           <ul className="flex flex-col">
-            {LINKS.map((link) => (
+            {MOBILE_LINKS.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
