@@ -15,13 +15,21 @@ const INPUT = "focus-ring tabular w-full rounded-lg border border-slate-300 px-3
  */
 export default function TradeForm({ today }: { today: string }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  // Controlled, because React resets a form's uncontrolled fields after every
+  // action, including one that returns an error, which wiped what was typed.
   const [symbol, setSymbol] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
+  const [day, setDay] = useState(today);
   const [formKey, setFormKey] = useState(0);
   const [state, formAction, pending] = useActionState(
     async (prev: FormState, formData: FormData) => {
       const result = await tradeAction(prev, formData);
       if (result.ok) {
         setSymbol("");
+        setQuantity("");
+        setPrice("");
+        setDay(today);
         setFormKey((key) => key + 1);
       }
       return result;
@@ -76,19 +84,19 @@ export default function TradeForm({ today }: { today: string }) {
           <label htmlFor="add-quantity" className="mb-1 block text-xs font-semibold text-slate-600">
             Shares
           </label>
-          <input id="add-quantity" name="quantity" type="number" inputMode="numeric" step="1" min="1" required placeholder="e.g. 500" className={INPUT} />
+          <input id="add-quantity" name="quantity" type="number" inputMode="numeric" step="1" min="1" required placeholder="e.g. 500" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={INPUT} />
         </div>
         <div>
           <label htmlFor="add-price" className="mb-1 block text-xs font-semibold text-slate-600">
             {buying ? "Buy price (PKR)" : "Sell price (PKR)"}
           </label>
-          <input id="add-price" name="price" type="number" inputMode="decimal" step="0.01" min="0.01" required placeholder="e.g. 245.50" className={INPUT} />
+          <input id="add-price" name="price" type="number" inputMode="decimal" step="0.01" min="0.01" required placeholder="e.g. 245.50" value={price} onChange={(event) => setPrice(event.target.value)} className={INPUT} />
         </div>
         <div>
           <label htmlFor="add-date" className="mb-1 block text-xs font-semibold text-slate-600">
             Trade date
           </label>
-          <input id="add-date" name="trade_date" type="date" max={today} defaultValue={today} required className={INPUT} />
+          <input id="add-date" name="trade_date" type="date" max={today} value={day} onChange={(event) => setDay(event.target.value)} required className={INPUT} />
         </div>
         <button
           type="submit"

@@ -354,6 +354,9 @@ class Profile(Base):
 
     user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     display_name: Mapped[str] = mapped_column(String(80), default="")
+    first_name: Mapped[str] = mapped_column(String(60), default="")
+    last_name: Mapped[str] = mapped_column(String(60), default="")
+    phone: Mapped[str] = mapped_column(String(24), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
@@ -641,6 +644,16 @@ def _migrate_legacy() -> None:
                         )
                     )
                     logger.info("Added the dated unique constraint to top_picks.")
+
+    # Profile fields added after accounts launched; create_all never adds a
+    # column to a table that already exists.
+    if "profiles" in tables:
+        columns = {col["name"] for col in inspector.get_columns("profiles")}
+        with engine.begin() as conn:
+            for name, kind in (("first_name", "VARCHAR(60)"), ("last_name", "VARCHAR(60)"), ("phone", "VARCHAR(24)")):
+                if name not in columns:
+                    conn.execute(text(f"ALTER TABLE profiles ADD COLUMN {name} {kind} DEFAULT ''"))
+                    logger.info("Added %s to profiles.", name)
 
     # ticker_data and news_and_events are superseded by stocks and news_items.
     with engine.begin() as conn:

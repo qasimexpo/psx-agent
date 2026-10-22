@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { DeleteAccountForm, NameForm } from "@/components/account/AccountForms";
+import { DeleteAccountForm, ProfileForm } from "@/components/account/AccountForms";
 import { SectionHeading } from "@/components/ui/Primitives";
 import { isAuthConfigured } from "@/lib/auth/config";
 import { requireUser } from "@/lib/auth/server";
@@ -43,9 +43,17 @@ export default async function AccountPage() {
           }
         />
 
-        <div className="card p-5 sm:p-6">
-          <NameForm initial={profile?.display_name || user.name} />
-        </div>
+        <section className="card p-5 sm:p-6" aria-labelledby="profile-title">
+          <h2 id="profile-title" className="mb-4 text-base font-bold text-navy-900">Profile</h2>
+          <ProfileForm
+            email={user.email}
+            profile={{
+              first_name: profile?.first_name ?? user.name.split(" ")[0] ?? "",
+              last_name: profile?.last_name ?? user.name.split(" ").slice(1).join(" "),
+              phone: profile?.phone ?? "",
+            }}
+          />
+        </section>
 
         <div className="card mt-5 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>

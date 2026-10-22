@@ -68,30 +68,61 @@ function iso(value: unknown): string | null {
 // profiles
 // ---------------------------------------------------------------------------
 
-/** Creates the profile on first sign-in; a returning user's row is left alone. */
-export async function ensureProfile(userId: string, displayName: string): Promise<void> {
+export type Profile = {
+  display_name: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  created_at: string | null;
+};
+
+export type ProfileFields = { first_name: string; last_name: string; phone: string };
+
+/** "First Last", or "" when neither is set. */
+export function fullName(fields: { first_name: string; last_name: string }): string {
+  return `${fields.first_name} ${fields.last_name}`.trim();
+}
+
+/**
+ * Creates the profile on first sign-in, with whatever name the sign-in
+ * provider gave (Google sends first and last name); a returning user's row is
+ * left alone.
+ */
+export async function ensureProfile(userId: string, displayName: string, first = "", last = ""): Promise<void> {
   await mutate`
-    INSERT INTO profiles (user_id, display_name, created_at, updated_at)
-    VALUES (${userId}, ${displayName.slice(0, 80)}, NOW(), NOW())
+    INSERT INTO profiles (user_id, display_name, first_name, last_name, phone, created_at, updated_at)
+    VALUES (${userId}, ${displayName.slice(0, 80)}, ${first.slice(0, 60)}, ${last.slice(0, 60)}, ${""}, NOW(), NOW())
     ON CONFLICT (user_id) DO NOTHING
   `;
 }
 
-export async function getProfile(
-  userId: string,
-): Promise<{ display_name: string; created_at: string | null } | null> {
+export async function getProfile(userId: string): Promise<Profile | null> {
   const rows = await mutate<Row>`
-    SELECT display_name, created_at FROM profiles WHERE user_id = ${userId}
+    SELECT display_name, first_name, last_name, phone, created_at FROM profiles WHERE user_id = ${userId}
   `;
   if (!rows.length) return null;
-  return { display_name: String(rows[0].display_name ?? ""), created_at: iso(rows[0].created_at) };
+  const row = rows[0];
+  return {
+    display_name: String(row.display_name ?? ""),
+    first_name: String(row.first_name ?? ""),
+    last_name: String(row.last_name ?? ""),
+    phone: String(row.phone ?? ""),
+    created_at: iso(row.created_at),
+  };
 }
 
-export async function saveDisplayName(userId: string, displayName: string): Promise<void> {
+/** Saves the profile; the display name shown on the portfolio follows the full name. */
+export async function saveProfile(userId: string, fields: ProfileFields): Promise<void> {
+  const display = fullName(fields).slice(0, 80);
   await mutate`
-    INSERT INTO profiles (user_id, display_name, created_at, updated_at)
-    VALUES (${userId}, ${displayName.slice(0, 80)}, NOW(), NOW())
-    ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = NOW()
+    INSERT INTO profiles (user_id, display_name, first_name, last_name, phone, created_at, updated_at)
+    VALUES (${userId}, ${display}, ${fields.first_name}, ${fields.last_name}, ${fields.phone}, NOW(), NOW())
+    ON CONFLICT (user_id) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      first_name = EXCLUDED.first_name,
+      last_name = EXCLUDED.last_name,
+      phone = EXCLUDED.phone,
+      updated_at = NOW()
   `;
 }
 
