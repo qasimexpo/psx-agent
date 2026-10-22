@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         // The analysis endpoints cost AI quota and return nothing useful to a
         // crawler, so they are kept out of the crawl budget.
-        disallow: ["/api/"],
+        disallow: ["/api/", "/portfolio", "/account", "/login", "/auth/"],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

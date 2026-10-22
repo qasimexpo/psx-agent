@@ -1,9 +1,9 @@
-"""The pipeline writes these tables; the Next.js app reads them.
+"""The SQLAlchemy models define the schema; the Next.js app queries it.
 
 Nothing in the type system connects the two, so a renamed column would only
 surface as an empty section on the live site. This test parses the SQL in
-`frontend/src/lib/db.ts` and asserts that every table and column it references
-actually exists in the SQLAlchemy models.
+`frontend/src/lib/db.ts` and `frontend/src/lib/portfolio.ts` and asserts that
+every table and column it references actually exists in the models.
 """
 
 from __future__ import annotations
@@ -20,6 +20,10 @@ sys.path.insert(0, str(ROOT))
 from pipeline import db  # noqa: E402
 
 DB_TS = ROOT / "frontend" / "src" / "lib" / "db.ts"
+PORTFOLIO_TS = ROOT / "frontend" / "src" / "lib" / "portfolio.ts"
+
+# Tables the site writes itself, from a visitor's action.
+SITE_WRITTEN = {"subscribers", "profiles", "holdings"}
 
 # Identifiers that appear in the SQL but are not columns.
 SQL_NOISE = {
@@ -29,6 +33,9 @@ SQL_NOISE = {
     "case", "when", "then", "else", "end", "is", "not", "null", "true",
     "false", "int", "current_date", "any", "like", "upper", "lower", "nulls",
     "first", "last", "in", "exists",
+    # statements that change data
+    "insert", "into", "values", "update", "set", "delete", "returning",
+    "conflict", "nothing", "excluded", "now",
 }
 
 
@@ -38,7 +45,7 @@ def _table_columns() -> dict[str, set[str]]:
         for model in (
             db.Stock, db.MarketIndex, db.Mover, db.SectorStat, db.CorporateEvent,
             db.Payout, db.NewsItem, db.TopPick, db.PickTrack, db.DailyBrief,
-            db.StockNote, db.Subscriber,
+            db.StockNote, db.Subscriber, db.Profile, db.Holding,
         )
     }
 
@@ -49,12 +56,29 @@ def _strip_sql_comments(sql: str) -> str:
 
 
 def _sql_blocks() -> list[str]:
-    """Every template literal passed to the tagged `query` helper."""
-    source = DB_TS.read_text(encoding="utf-8")
-    return [
-        _strip_sql_comments(block)
-        for block in re.findall(r"query<[^>]*>`(.*?)`", source, re.DOTALL)
-    ]
+    """Every template literal passed to the tagged `query` or `mutate` helpers."""
+    blocks: list[str] = []
+    for path in (DB_TS, PORTFOLIO_TS):
+        if not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8")
+        blocks += [
+            _strip_sql_comments(block)
+            # The lookbehind skips prose like "`mutate` throws" in doc comments.
+            for block in re.findall(
+                r"(?<!`)\b(?:query|mutate)(?:<[^>]*>)?`(.*?)`", source, re.DOTALL
+            )
+        ]
+    return blocks
+
+
+def _tables_in(block: str) -> set[str]:
+    """Tables a statement reads from or writes to.
+
+    `ON CONFLICT ... DO UPDATE SET` would otherwise read as a table named "set".
+    """
+    found = re.findall(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_]+)", block, re.IGNORECASE)
+    return {name for name in found if name.lower() != "set"}
 
 
 @pytest.fixture(scope="module")
@@ -70,8 +94,7 @@ def test_every_referenced_table_exists(blocks: list[str]) -> None:
     known = set(_table_columns())
     referenced: set[str] = set()
     for block in blocks:
-        referenced.update(re.findall(r"\bFROM\s+([a-z_]+)", block, re.IGNORECASE))
-        referenced.update(re.findall(r"\bJOIN\s+([a-z_]+)", block, re.IGNORECASE))
+        referenced |= _tables_in(block)
 
     unknown = referenced - known
     assert not unknown, f"Frontend queries unknown tables: {sorted(unknown)}"
@@ -83,8 +106,7 @@ def test_every_referenced_column_exists(blocks: list[str]) -> None:
     problems: list[str] = []
 
     for block in blocks:
-        tables = set(re.findall(r"\bFROM\s+([a-z_]+)", block, re.IGNORECASE))
-        tables |= set(re.findall(r"\bJOIN\s+([a-z_]+)", block, re.IGNORECASE))
+        tables = _tables_in(block)
         if not tables:
             continue
 
@@ -199,5 +221,5 @@ def test_pipeline_writes_every_table_the_site_reads(blocks: list[str]) -> None:
         "payouts", "news_items", "top_picks", "pick_track", "daily_briefs",
         "stock_notes",
     }
-    orphans = read - written
+    orphans = read - written - SITE_WRITTEN
     assert not orphans, f"Site reads tables the pipeline never writes: {sorted(orphans)}"

@@ -836,6 +836,17 @@ export async function getMarketStats(): Promise<{
   };
 }
 
+/** When the market job last wrote a quote, as an ISO timestamp for the sync status. */
+export async function getLastPriceSync(): Promise<string | null> {
+  const rows = await query<Row>`
+    SELECT MAX(quote_at) AS latest FROM stocks WHERE current_price > 0
+  `;
+  const latest = rows[0]?.latest;
+  if (!latest) return null;
+  const at = latest instanceof Date ? latest : new Date(String(latest));
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
+
 /**
  * Every KSE-100 constituent that traded, for the market map.
  *

@@ -6,11 +6,11 @@ import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Privacy policy",
   description:
-    "How SmartSarmaya handles data: no accounts, no stored portfolios, and what Google Analytics and AdSense cookies collect when you use our free PSX tools.",
+    "How SmartSarmaya handles data: optional accounts and saved portfolios, what we store and why, and what Google Analytics and AdSense cookies collect when you use our free PSX tools.",
   alternates: { canonical: "/privacy-policy" },
 };
 
-const LAST_UPDATED = "5 September 2026";
+const LAST_UPDATED = "22 October 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -26,13 +26,15 @@ export default function PrivacyPolicyPage() {
         <div className="card p-5 sm:p-6">
           <h2 className="text-base font-bold text-navy-900">The short version</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-700">
-            SmartSarmaya has no accounts, no login and no registration, so we hold no name,
-            phone number or password for you. The one piece of personal data we store is an email
-            address, and only if you ask for the newsletter; you can remove it in one click.
-            Portfolio holdings you type into the audit tool are used to answer that one request
-            and are never written to our database. What does happen is ordinary web hosting: our
-            server keeps short lived request logs, and Google Analytics and Google AdSense run on
-            the site and set their own cookies.
+            Every tool on SmartSarmaya works without an account. If you choose to create one, we
+            store your email address, a display name and the holdings you save, only so we can
+            show you your portfolio; you can delete all of it yourself, permanently, from the
+            account page. There are no passwords: you sign in with an emailed link or Google. We
+            also store an email address if you ask for the newsletter. Holdings you type into the
+            free audit tool are used to answer that one request and are never written to our
+            database. Beyond that it is ordinary web hosting: our server keeps short lived request
+            logs, and Google Analytics and Google AdSense run on the site and set their own
+            cookies.
           </p>
         </div>
 
@@ -56,17 +58,18 @@ export default function PrivacyPolicyPage() {
           <h2 className="text-base font-bold text-navy-900">2. What we do not collect</h2>
           <ul className="mt-3 space-y-2.5 text-sm leading-relaxed text-slate-700">
             <li>
-              <strong className="text-navy-900">No accounts.</strong> There is no sign up, no
-              login and no password, so there is no user profile to store, breach or sell. The
-              newsletter is the one place an email address is stored, it is optional, and it gives
-              you nothing to log in to; see section 3.
+              <strong className="text-navy-900">No passwords, and no account required.</strong>{" "}
+              An account is optional and only needed to save a portfolio. Signing in uses a link
+              emailed to you or your Google account, so we never hold a password for you. What an
+              account stores is listed in section 3.
             </li>
             <li>
-              <strong className="text-navy-900">No stored portfolios.</strong> When you enter
-              symbols, quantities and buy prices into the portfolio audit tool, that information is
-              held in memory only for as long as it takes to produce your report. It is not written
-              to our database, not attached to an identity, and not reused for any other purpose.
-              Close the tab and it is gone.
+              <strong className="text-navy-900">Audit tool entries are not stored.</strong> When
+              you enter symbols, quantities and buy prices into the portfolio audit tool, that
+              information is held in memory only for as long as it takes to produce your report. It
+              is not written to our database, not attached to an identity or account, and not
+              reused for any other purpose. Close the tab and it is gone. Holdings you save to your
+              own portfolio while signed in are different, and are covered in section 3.
             </li>
             <li>
               <strong className="text-navy-900">No financial account details.</strong> We never ask
@@ -111,6 +114,18 @@ export default function PrivacyPolicyPage() {
               can also write to us to be removed. When you unsubscribe we keep the address on a
               suppression record rather than deleting it, so that a later send cannot accidentally
               email you again; say so in your message if you would rather it were erased outright.
+            </li>
+            <li>
+              <strong className="text-navy-900">
+                Your account and saved portfolio, if you create one.
+              </strong>{" "}
+              Supabase, which runs our sign-in, holds your email address, how you signed in
+              (email link or Google) and when. Our database holds a display name and, for each
+              stock you save, the symbol, number of shares, average cost and when you last changed
+              it. A sign-in cookie keeps you signed in. We use this only to show you your own
+              portfolio. It is never sold, shared, shown to other visitors, sent to an AI provider
+              or advertiser, or passed to Google Analytics. Deleting your account from the account
+              page erases the sign-in, the profile and every holding immediately and permanently.
             </li>
             <li>
               <strong className="text-navy-900">Anything you email us.</strong> If you write to us,
@@ -193,10 +208,13 @@ export default function PrivacyPolicyPage() {
                 </tr>
                 <tr className="border-t border-slate-100">
                   <td className="px-3 py-2.5 font-semibold text-navy-900">Supabase</td>
-                  <td className="px-3 py-2.5">Database for market data, published picks and newsletter subscriptions</td>
                   <td className="px-3 py-2.5">
-                    Stock prices, indicators and picks, plus the email address of anyone who
-                    subscribes to the newsletter. No portfolios
+                    Database and sign-in, for market data, published picks, newsletter subscriptions
+                    and accounts
+                  </td>
+                  <td className="px-3 py-2.5">
+                    Stock prices, indicators and picks; the email address of newsletter subscribers
+                    and account holders; and the holdings saved in each account
                   </td>
                 </tr>
                 <tr className="border-t border-slate-100">
@@ -209,10 +227,12 @@ export default function PrivacyPolicyPage() {
                 <tr className="border-t border-slate-100">
                   <td className="px-3 py-2.5 font-semibold text-navy-900">Google</td>
                   <td className="px-3 py-2.5">
-                    Gemini fallback model, Analytics, AdSense, fonts
+                    Gemini fallback model, Analytics, AdSense, fonts, and Google sign-in if you
+                    choose it
                   </td>
                   <td className="px-3 py-2.5">
-                    Prompt text on fallback, plus analytics and advertising signals
+                    Prompt text on fallback, analytics and advertising signals, and, if you sign in
+                    with Google, that you signed in to SmartSarmaya
                   </td>
                 </tr>
               </tbody>
@@ -220,8 +240,8 @@ export default function PrivacyPolicyPage() {
           </div>
           <p className="mt-4 text-sm leading-relaxed text-slate-700">
             When you run a portfolio audit or a stock analysis, the text of that request is sent to
-            the AI provider so it can generate the answer. It is not sent with your name or any
-            identifier from us, because we do not have one. Each provider handles that request
+            the AI provider so it can generate the answer. It is not sent with your name, your
+            email address or any account identifier, and saved portfolios are never sent at all. Each provider handles that request
             under its own privacy terms, so if the composition of your portfolio is sensitive to
             you, consider using the tool with a subset of your holdings.
           </p>
@@ -253,14 +273,18 @@ export default function PrivacyPolicyPage() {
             The site is operated for a Pakistani audience, but the providers listed above run
             servers outside Pakistan, including in the United States and Europe. Using the site
             means your request data is processed in those countries, where data protection law may
-            differ from Pakistani law. We limit what is sent by keeping the site free of accounts
-            in the first place.
+            differ from Pakistani law. We limit what is stored: an account is optional, and holds
+            only your email address, a display name and the holdings you choose to save.
           </p>
         </div>
 
         <div className="card mt-5 p-5 sm:p-6">
           <h2 className="text-base font-bold text-navy-900">10. Your choices</h2>
           <ul className="mt-3 space-y-2.5 text-sm leading-relaxed text-slate-700">
+            <li>
+              Delete your account, profile and saved holdings at any time from the account page.
+              It takes effect immediately.
+            </li>
             <li>Block or delete cookies in your browser at any time.</li>
             <li>Turn off personalised ads at Google Ads Settings.</li>
             <li>Use a content blocker to stop analytics and ad scripts loading.</li>
