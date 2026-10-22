@@ -92,6 +92,22 @@ def run() -> dict[str, int]:
     except psx.PsxUnavailableError:
         logger.exception("Payouts unavailable; keeping previous rows.")
 
+    # The whole year's payouts, kept after their book closure for dividend income.
+    try:
+        year = [
+            {
+                "symbol": item["symbol"],
+                "payout": item["payout"][:120],
+                "announced_on": _parse_date(item["announced_on"]),
+                "book_closure_from": _parse_date(item["book_closure_from"]),
+                "book_closure_to": _parse_date(item["book_closure_to"]),
+            }
+            for item in psx.fetch_payouts(datetime.now(PKT).year)
+        ]
+        counts["payouts_archived"] = db.archive_payouts(year)
+    except Exception:  # noqa: BLE001 - the archive must never fail the job
+        logger.exception("Payout archive failed; live payouts are unaffected.")
+
     # Headlines
     rows: list[dict] = []
     try:

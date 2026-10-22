@@ -63,6 +63,7 @@ export default function TrendChart({
   formatAxis = formatValue,
   height = 260,
   pending = false,
+  emptyMessage = "Not enough price history yet. It fills in after the next daily update.",
 }: {
   series: ChartSeries[];
   /** What the chart shows, for screen readers and the table caption. */
@@ -73,6 +74,8 @@ export default function TrendChart({
   height?: number;
   /** Hold the previous render, dimmed, while new data loads. */
   pending?: boolean;
+  /** Shown instead of the chart when there are fewer than two days to draw. */
+  emptyMessage?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   // Unknown until measured in the browser; the server reserves the space instead.
@@ -109,7 +112,7 @@ export default function TrendChart({
         className="flex items-center justify-center rounded-lg bg-slate-50 text-sm text-slate-500"
         style={{ height: height + 26 }}
       >
-        Not enough price history yet. It fills in after the next daily update.
+        {emptyMessage}
       </div>
     );
   }

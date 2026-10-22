@@ -4,11 +4,11 @@ import { SymbolLink } from "@/components/ui/Primitives";
 import type { UpcomingItem } from "@/lib/db";
 import { shortDate } from "@/lib/format";
 
-/** Book closures and meetings coming up for the stocks a user holds. */
+/** Meetings coming up for the stocks a user holds; payouts have their own card. */
 export default function UpcomingEvents({ items }: { items: UpcomingItem[] }) {
   return (
     <section className="card p-5">
-      <h2 className="text-base font-bold text-navy-900">Coming up for your stocks</h2>
+      <h2 className="text-base font-bold text-navy-900">Meetings coming up</h2>
       {items.length ? (
         <ul className="mt-3 divide-y divide-slate-100">
           {items.slice(0, 8).map((item) => (
@@ -35,7 +35,7 @@ export default function UpcomingEvents({ items }: { items: UpcomingItem[] }) {
         </ul>
       ) : (
         <p className="mt-3 text-sm text-slate-500">
-          No dividends, book closures or meetings announced for your stocks right now.
+          No AGMs or board meetings announced for your stocks right now.
         </p>
       )}
     </section>

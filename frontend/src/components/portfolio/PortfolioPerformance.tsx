@@ -25,9 +25,12 @@ const AXIS_COMPACT = new Intl.NumberFormat("en-PK", { notation: "compact", maxim
 export default function PortfolioPerformance({
   value,
   benchmark,
+  usesTrades,
 }: {
   value: PricePoint[];
   benchmark: PricePoint[];
+  /** Whether share counts follow recorded trades, which changes what the line means. */
+  usesTrades: boolean;
 }) {
   const [range, setRange] = useState<RangeKey>("3M");
   const [mode, setMode] = useState<Mode>("value");
@@ -57,7 +60,9 @@ export default function PortfolioPerformance({
         <div>
           <h2 className="text-base font-bold text-navy-900">Performance</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            What the shares you hold now were worth each day. Past buys and sells are not included.
+            {usesTrades
+              ? "Your holdings' value each day, following your recorded buys and sells. Cash is not included."
+              : "What the shares you hold now were worth each day. Record trades to follow past buys and sells."}
           </p>
         </div>
         <div className="text-right">
@@ -115,6 +120,11 @@ export default function PortfolioPerformance({
           formatValue={mode === "value" ? pkr : (v) => percent(v)}
           formatAxis={mode === "value" ? (v) => AXIS_COMPACT.format(v) : (v) => percent(v)}
           height={240}
+          emptyMessage={
+            usesTrades
+              ? "The chart starts from your first trade and grows a day at a time."
+              : "Not enough price history yet. It fills in after the next daily update."
+          }
         />
       </div>
     </section>
