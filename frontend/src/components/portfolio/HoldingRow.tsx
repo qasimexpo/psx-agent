@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 
@@ -8,15 +9,32 @@ import {
   updateHoldingAction,
   type FormState,
 } from "@/app/portfolio/actions";
-import { ChangePill, HalalBadge, SymbolLink } from "@/components/ui/Primitives";
+import { Delta, MiniTrend } from "@/components/charts/Trend";
+import { HalalBadge } from "@/components/ui/Primitives";
+import type { PricePoint } from "@/lib/charts";
 import { changeClass, money, percent, signedMoney } from "@/lib/format";
 import type { Position } from "@/lib/portfolio";
 
 const CELL = "px-3 py-3 text-right tabular";
 const INPUT = "focus-ring tabular w-24 rounded-md border border-slate-300 px-2 py-1 text-right text-sm";
 
-/** One position, with an inline editor for correcting shares or average cost. */
-export default function HoldingRow({ position }: { position: Position }) {
+/**
+ * One position. The stock and its trend link to the stock's full page; an
+ * inline editor corrects shares or average cost.
+ */
+export default function HoldingRow({
+  position,
+  weight,
+  trend,
+  trendChange,
+}: {
+  position: Position;
+  /** Share of the portfolio's market value, in percent. */
+  weight: number | null;
+  /** About three months of closes, ending today. */
+  trend: PricePoint[];
+  trendChange: number | null;
+}) {
   const [editing, setEditing] = useState(false);
   const [state, formAction, pending] = useActionState(
     async (prev: FormState, formData: FormData) => {
@@ -27,15 +45,37 @@ export default function HoldingRow({ position }: { position: Position }) {
     {},
   );
   const formId = `edit-${position.symbol}`;
+  const href = `/stock/${position.symbol}`;
 
   return (
-    <tr className="border-t border-slate-100 align-middle">
+    <tr className="border-t border-slate-100 align-middle transition-colors hover:bg-slate-50/70">
       <td className="px-3 py-3">
-        <SymbolLink symbol={position.symbol} />
-        <p className="max-w-[16rem] truncate text-xs text-slate-500">{position.name || "—"}</p>
+        <Link href={href} className="group block rounded focus-ring">
+          <span className="font-semibold text-navy-900 underline-offset-2 group-hover:text-emerald-700 group-hover:underline">
+            {position.symbol}
+          </span>
+          <span className="block max-w-[15rem] truncate text-xs text-slate-500">
+            {position.name || "—"}
+          </span>
+        </Link>
         <div className="mt-1">
           <HalalBadge verified={position.is_kmi} />
         </div>
+      </td>
+
+      <td className="px-3 py-3">
+        <Link
+          href={href}
+          className="flex items-center gap-2 rounded focus-ring"
+          aria-label={`${position.symbol} chart`}
+        >
+          <MiniTrend
+            points={trend}
+            change={trendChange}
+            caption={`${position.symbol} over 3 months: ${percent(trendChange)}`}
+          />
+          <Delta value={trendChange} className="text-xs" />
+        </Link>
       </td>
 
       {editing ? (
@@ -77,16 +117,25 @@ export default function HoldingRow({ position }: { position: Position }) {
         </>
       )}
 
-      <td className={`${CELL} font-semibold text-navy-900`}>{money(position.price)}</td>
       <td className={CELL}>
-        <ChangePill value={position.change_pct} />
+        <span className="font-semibold text-navy-900">{money(position.price)}</span>
+        <span className="block text-xs">
+          <Delta value={position.change_pct} />
+        </span>
       </td>
-      <td className={CELL}>{money(position.value)}</td>
+      <td className={CELL}>
+        {money(position.value)}
+        <span className="block text-xs text-slate-500">
+          {weight === null ? "—" : `${weight.toFixed(1)}% of portfolio`}
+        </span>
+      </td>
       <td className={CELL}>
         <span className={`font-semibold ${changeClass(position.pl)}`}>
           {signedMoney(position.pl)}
         </span>
-        <p className={`text-xs ${changeClass(position.pl_pct)}`}>{percent(position.pl_pct)}</p>
+        <span className="block text-xs">
+          <Delta value={position.pl_pct} />
+        </span>
       </td>
 
       <td className="px-3 py-3 text-right">

@@ -17,6 +17,7 @@ import {
   rangePosition,
   relativeTime,
 } from "@/lib/format";
+import StockPriceChart from "@/components/stocks/StockPriceChart";
 import { Disclaimer, RangeBar } from "@/components/ui/Primitives";
 import GoogleAd from "@/components/GoogleAd";
 import { AD_SLOT_ARTICLE } from "@/lib/adsense";
@@ -264,6 +265,8 @@ export default async function StockPage({
             </div>
           ) : null}
         </header>
+
+        <StockPriceChart symbol={clean} price={stock.current_price} quoteAt={stock.quote_at} />
 
         <p className="mt-4 px-1 text-[15px] leading-relaxed text-slate-700">
           <strong className="text-navy-900">

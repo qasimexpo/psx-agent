@@ -10,6 +10,7 @@ Schema
 ------
 stocks           one row per listed symbol: identity, halal flag, live quote,
                  and derived technicals
+price_history    the last year of daily closes per symbol, for charts
 market_index     daily index closes plus the latest intraday sparkline
 movers           top gainers / losers / most active, replaced each run
 sector_stats     advance-decline and turnover per sector
@@ -260,6 +261,22 @@ class DailyBrief(Base):
     index_value: Mapped[float | None] = mapped_column(Float)
     index_change_pct: Mapped[float | None] = mapped_column(Float)
     model_used: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class PriceHistory(Base):
+    """The last year of daily closes for one symbol, as [["YYYY-MM-DD", close], ...].
+
+    The technicals job already downloads this to compute indicators; keeping
+    it costs one row per symbol and gives the site its price charts. One JSON
+    row rather than a row per day keeps the daily write to ~500 upserts and
+    the read for a whole portfolio to a single indexed lookup.
+    """
+
+    __tablename__ = "price_history"
+
+    symbol: Mapped[str] = mapped_column(String(20), primary_key=True)
+    series: Mapped[list[Any]] = mapped_column(JSON, default=list)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
@@ -664,6 +681,27 @@ def upsert_stocks(rows: list[dict[str, Any]]) -> int:
         return 0
     with session_scope() as session:
         return _upsert(session, Stock, rows, ["symbol"])
+
+
+#: Trading days kept per symbol: about one calendar year.
+PRICE_HISTORY_DAYS = 260
+
+
+def history_row(symbol: str, series: Iterable[tuple[date, float, int]]) -> dict[str, Any]:
+    """The price_history row for a symbol's end-of-day series (oldest first)."""
+    closes = [[day.isoformat(), round(close, 2)] for day, close, _ in series]
+    return {
+        "symbol": symbol,
+        "series": closes[-PRICE_HISTORY_DAYS:],
+        "updated_at": _utc_now(),
+    }
+
+
+def upsert_price_history(rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+    with session_scope() as session:
+        return _upsert(session, PriceHistory, rows, ["symbol"])
 
 
 def upsert_index_snapshot(

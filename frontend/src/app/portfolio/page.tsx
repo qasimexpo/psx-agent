@@ -2,13 +2,24 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BriefcaseBusiness, LockKeyhole, Settings } from "lucide-react";
 
+import Donut from "@/components/charts/Donut";
 import AddHoldingForm from "@/components/portfolio/AddHoldingForm";
 import HoldingRow from "@/components/portfolio/HoldingRow";
+import PortfolioPerformance from "@/components/portfolio/PortfolioPerformance";
 import PriceSyncStatus from "@/components/portfolio/PriceSyncStatus";
+import UpcomingEvents from "@/components/portfolio/UpcomingEvents";
 import { Disclaimer, EmptyState, SectionHeading, StatTile } from "@/components/ui/Primitives";
 import { isAuthConfigured } from "@/lib/auth/config";
 import { requireUser } from "@/lib/auth/server";
-import { getLastPriceSync } from "@/lib/db";
+import {
+  changePct,
+  foldSlices,
+  holdingsValueSeries,
+  sliceRange,
+  withLatest,
+  type PricePoint,
+} from "@/lib/charts";
+import { getIndexHistory, getLastPriceSync, getPriceHistories, getUpcomingFor } from "@/lib/db";
 import { percent, pkr, signedMoney } from "@/lib/format";
 import { MAX_HOLDINGS, getProfile, listPositions, summarise, type Position } from "@/lib/portfolio";
 
@@ -66,6 +77,26 @@ export default async function PortfolioPage() {
   const totals = summarise(positions);
   const unpriced = positions.filter((p) => p.price === null).length;
 
+  // These reads degrade to empty on failure, so a chart can go blank but the
+  // holdings above always render.
+  const symbols = positions.map((p) => p.symbol);
+  const [histories, kse100, upcoming] = await Promise.all([
+    getPriceHistories(symbols),
+    getIndexHistory("KSE100", 260),
+    getUpcomingFor(symbols),
+  ]);
+  const closes: Record<string, PricePoint[]> = Object.fromEntries(
+    positions.map((p) => [p.symbol, withLatest(histories[p.symbol] ?? [], p.price, p.quote_at)]),
+  );
+  const valueSeries = holdingsValueSeries(positions, closes);
+  const benchmark = kse100.map(({ day, value }) => ({ t: day, v: value }));
+
+  const bySector = new Map<string, number>();
+  for (const p of positions) {
+    const sector = p.sector_name || "Unclassified";
+    bySector.set(sector, (bySector.get(sector) ?? 0) + p.value);
+  }
+
   return (
     <Shell>
       <SectionHeading
@@ -90,7 +121,7 @@ export default async function PortfolioPage() {
 
       {positions.length ? (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
             <StatTile label="Market value" value={pkr(totals.value)} hint={`Cost ${pkr(totals.cost)}`} />
             <StatTile
               label="Total profit / loss"
@@ -116,6 +147,23 @@ export default async function PortfolioPage() {
               exchange and {unpriced > 1 ? "are" : "is"} valued at cost.
             </p>
           ) : null}
+
+          <div className="mt-6">
+            <PortfolioPerformance value={valueSeries} benchmark={benchmark} />
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <Donut
+              title="By stock"
+              centerLabel={positions.length === 1 ? "stock" : "stocks"}
+              slices={foldSlices(positions.map((p) => ({ label: p.symbol, value: p.value })))}
+            />
+            <Donut
+              title="By sector"
+              centerLabel={bySector.size === 1 ? "sector" : "sectors"}
+              slices={foldSlices([...bySector].map(([label, value]) => ({ label, value })))}
+            />
+          </div>
         </>
       ) : null}
 
@@ -126,14 +174,14 @@ export default async function PortfolioPage() {
       <div className="mt-6">
         {positions.length ? (
           <div className="card table-scroll">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2.5 text-left">Stock</th>
+                  <th className="px-3 py-2.5 text-left">3 months</th>
                   <th className="px-3 py-2.5 text-right">Shares</th>
                   <th className="px-3 py-2.5 text-right">Avg cost</th>
-                  <th className="px-3 py-2.5 text-right">Price</th>
-                  <th className="px-3 py-2.5 text-right">Today</th>
+                  <th className="px-3 py-2.5 text-right">Price · today</th>
                   <th className="px-3 py-2.5 text-right">Value</th>
                   <th className="px-3 py-2.5 text-right">Profit / loss</th>
                   <th className="px-3 py-2.5">
@@ -142,9 +190,18 @@ export default async function PortfolioPage() {
                 </tr>
               </thead>
               <tbody>
-                {positions.map((position) => (
-                  <HoldingRow key={position.symbol} position={position} />
-                ))}
+                {positions.map((position) => {
+                  const trend = sliceRange(closes[position.symbol], "3M");
+                  return (
+                    <HoldingRow
+                      key={position.symbol}
+                      position={position}
+                      weight={totals.value > 0 ? (position.value / totals.value) * 100 : null}
+                      trend={trend}
+                      trendChange={changePct(trend)}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -156,6 +213,12 @@ export default async function PortfolioPage() {
           />
         )}
       </div>
+
+      {positions.length ? (
+        <div className="mt-6">
+          <UpcomingEvents items={upcoming} />
+        </div>
+      ) : null}
 
       <Disclaimer className="mt-10" />
     </Shell>
