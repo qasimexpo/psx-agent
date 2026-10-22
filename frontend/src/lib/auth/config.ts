@@ -11,7 +11,20 @@
  * need them say so, which keeps `next build` working in CI and on a fresh clone.
  */
 
-export const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+/**
+ * Only the origin is kept. The dashboard also shows the Data API URL
+ * (`https://<ref>.supabase.co/rest/v1/`), and pasting that here sent Google
+ * sign-in to `/rest/v1/auth/v1/authorize`, which answers "No API key found".
+ */
+function originOf(raw: string): string {
+  try {
+    return raw ? new URL(raw).origin : "";
+  } catch {
+    return "";
+  }
+}
+
+export const SUPABASE_URL = originOf((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim());
 export const SUPABASE_PUBLISHABLE_KEY = (
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? ""
 ).trim();
