@@ -23,7 +23,7 @@ DB_TS = ROOT / "frontend" / "src" / "lib" / "db.ts"
 PORTFOLIO_TS = ROOT / "frontend" / "src" / "lib" / "portfolio.ts"
 
 # Tables the site writes itself, from a visitor's action.
-SITE_WRITTEN = {"subscribers", "profiles", "holdings", "trades", "watchlist"}
+SITE_WRITTEN = {"subscribers", "profiles", "holdings", "trades", "watchlist", "price_alerts"}
 
 # Identifiers that appear in the SQL but are not columns.
 SQL_NOISE = {
@@ -46,7 +46,7 @@ def _table_columns() -> dict[str, set[str]]:
             db.Stock, db.MarketIndex, db.Mover, db.SectorStat, db.CorporateEvent,
             db.Payout, db.NewsItem, db.TopPick, db.PickTrack, db.DailyBrief,
             db.StockNote, db.Subscriber, db.Profile, db.Holding, db.PriceHistory,
-            db.Trade, db.WatchlistItem, db.PayoutHistory,
+            db.Trade, db.WatchlistItem, db.PayoutHistory, db.PriceAlert,
         )
     }
 

@@ -13,8 +13,8 @@ import re
 import time
 from datetime import datetime
 
-from pipeline import db, indicators, psx
-from pipeline.config import PKT, SECTOR_CODE_NAMES
+from pipeline import db, indicators, mailer, psx
+from pipeline.config import PKT, SECTOR_CODE_NAMES, SITE_NAME, SITE_URL
 
 logger = logging.getLogger("smartsarmaya.jobs.market")
 
@@ -52,6 +52,21 @@ def _company_symbol(symbol: str, directory: dict, listed: set[str]) -> str:
     if match and match.group(1) in directory and match.group(1) not in listed:
         return match.group(1)
     return symbol
+
+
+def _email_alert(alert: dict[str, object]) -> bool:
+    symbol = alert["symbol"]
+    word = "above" if alert["direction"] == "above" else "below"
+    subject = f"{symbol} is {word} Rs {alert['target']:,.2f}"
+    text = (
+        f"{symbol} traded at Rs {alert['price']:,.2f}, crossing your alert for "
+        f"{word} Rs {alert['target']:,.2f}.\n\n"
+        f"See the chart: {SITE_URL}/stock/{symbol}\n\n"
+        "This alert is now off. You can set a new one from the stock page.\n\n"
+        f"{SITE_NAME} is an educational research tool, not financial advice. "
+        f"Manage your alerts at {SITE_URL}/portfolio"
+    )
+    return mailer.send(str(alert["email"]), subject, text)
 
 
 def run() -> dict[str, int]:
@@ -95,6 +110,15 @@ def run() -> dict[str, int]:
     stock_count = db.upsert_stocks(rows)
     halal_count = sum(1 for row in rows if row["is_kmi"])
     logger.info("Upserted %s quotes (%s Shariah compliant).", stock_count, halal_count)
+
+    # Price alerts, checked against the quotes just stored.
+    try:
+        fired = db.trigger_price_alerts()
+        if fired:
+            logger.info("Fired %s price alerts.", len(fired))
+            db.mark_alerts_notified(alert["id"] for alert in fired if _email_alert(alert))
+    except Exception:  # noqa: BLE001 - alerts must never fail the market job
+        logger.exception("Price alert check failed; quotes are stored.")
 
     # Movers
     mover_count = 0

@@ -3,7 +3,7 @@
 The jobs publish through notify.py and social.py whenever credentials are
 present in the environment, and `.env` on a developer machine may well hold
 real ones. Strip every publishing credential before each test so the suite
-can never post to Telegram, X, Facebook or Instagram.
+can never post to Telegram, X, Facebook or Instagram, or send email.
 """
 
 import pytest
@@ -18,6 +18,8 @@ PUBLISHING_VARS = (
     "FACEBOOK_PAGE_ID",
     "FACEBOOK_PAGE_TOKEN",
     "INSTAGRAM_USER_ID",
+    "SMTP_HOST",
+    "MAIL_FROM",
 )
 
 

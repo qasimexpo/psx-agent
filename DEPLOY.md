@@ -106,6 +106,30 @@ The `profiles` and `holdings` tables are created by the pipeline like every
 other table, so after deploying, run any pipeline job once (Actions → Pipeline
 → Run workflow) before the first sign-in.
 
+### Price alert emails (optional)
+
+Alerts always fire and show on `/portfolio`. To also email them, add these
+**GitHub repository secrets** (Settings → Secrets and variables → Actions),
+using the same SMTP provider as Supabase Auth if you like:
+
+| Secret | Example |
+| --- | --- |
+| `SMTP_HOST` | `smtp.resend.com` |
+| `SMTP_PORT` | `587` (or `465` for implicit TLS) |
+| `SMTP_USERNAME` | `resend` |
+| `SMTP_PASSWORD` | the provider's SMTP password or API key |
+| `MAIL_FROM` | `SmartSarmaya <alerts@smartsarmaya.com>` |
+
+Then set `ALERT_EMAILS` = `on` in **Vercel**, so the site tells people an
+email is coming. Without it the site says alerts show on the portfolio.
+
+### Statement import
+
+Importing holdings from a broker statement PDF uses the existing
+`GROQ_API_KEY` (or `GEMINI_API_KEY`) in Vercel; nothing else is needed. The PDF
+is read in the browser, and only its text, with long numbers and emails
+removed, reaches the server.
+
 ---
 
 ## 3. Point the domain at Vercel

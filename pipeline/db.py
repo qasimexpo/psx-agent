@@ -29,6 +29,7 @@ profiles         one row per signed-in user (written by the site)
 holdings         each user's positions, one per symbol (written by the site)
 trades           each user's recorded buys and sells (written by the site)
 watchlist        symbols a user follows without holding them (written by the site)
+price_alerts     one-shot price alerts: the site creates them, the market job fires them
 """
 
 from __future__ import annotations
@@ -430,6 +431,29 @@ class PayoutHistory(Base):
     book_closure_from: Mapped[date] = mapped_column(Date, index=True)
     book_closure_to: Mapped[date | None] = mapped_column(Date)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class PriceAlert(Base):
+    """Tell a user when a symbol trades above or below a price. Fires once.
+
+    The site creates the row with the signed-in user's email; the market job
+    stamps triggered_at the first time a quote crosses the target, and
+    notified_at once the email has gone. A fired alert stays as a record
+    until the user deletes it.
+    """
+
+    __tablename__ = "price_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    email: Mapped[str] = mapped_column(String(320), default="")
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    direction: Mapped[str] = mapped_column(String(5))  # above|below
+    target: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    triggered_price: Mapped[float | None] = mapped_column(Float)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # --------------------------------------------------------------------------
@@ -933,6 +957,48 @@ def archive_payouts(rows: list[dict[str, Any]]) -> int:
     with session_scope() as session:
         _insert_ignore(session, PayoutHistory, fresh, ["symbol", "payout", "book_closure_from"])
     return len(fresh)
+
+
+def trigger_price_alerts() -> list[dict[str, Any]]:
+    """Fire every untriggered alert whose symbol's quote has crossed its target.
+
+    Each alert fires once: triggered_at is set in the same transaction that
+    finds it, so a later run never fires it again.
+    """
+    fired: list[dict[str, Any]] = []
+    with session_scope() as session:
+        rows = session.execute(
+            select(PriceAlert, Stock.current_price)
+            .join(Stock, Stock.symbol == PriceAlert.symbol)
+            .where(PriceAlert.triggered_at.is_(None), Stock.current_price > 0)
+        ).all()
+        now = _utc_now()
+        for alert, price in rows:
+            crossed = price >= alert.target if alert.direction == "above" else price <= alert.target
+            if not crossed:
+                continue
+            alert.triggered_at = now
+            alert.triggered_price = price
+            fired.append(
+                {
+                    "id": alert.id,
+                    "email": alert.email,
+                    "symbol": alert.symbol,
+                    "direction": alert.direction,
+                    "target": alert.target,
+                    "price": price,
+                }
+            )
+    return fired
+
+
+def mark_alerts_notified(ids: Iterable[int]) -> None:
+    ids = list(ids)
+    if not ids:
+        return
+    with session_scope() as session:
+        for alert in session.execute(select(PriceAlert).where(PriceAlert.id.in_(ids))).scalars():
+            alert.notified_at = _utc_now()
 
 
 def upsert_top_picks(

@@ -3,8 +3,10 @@ import Link from "next/link";
 import { BriefcaseBusiness, LockKeyhole, Settings } from "lucide-react";
 
 import Donut from "@/components/charts/Donut";
+import AlertsCard from "@/components/portfolio/AlertsCard";
 import DividendsCard from "@/components/portfolio/DividendsCard";
 import HoldingRow from "@/components/portfolio/HoldingRow";
+import ImportStatement from "@/components/portfolio/ImportStatement";
 import PortfolioPerformance from "@/components/portfolio/PortfolioPerformance";
 import PriceSyncStatus from "@/components/portfolio/PriceSyncStatus";
 import TradeForm from "@/components/portfolio/TradeForm";
@@ -29,6 +31,7 @@ import { percent, pkr, signedMoney } from "@/lib/format";
 import {
   MAX_HOLDINGS,
   getProfile,
+  listAlerts,
   listPayoutsFor,
   listPositions,
   listTrades,
@@ -96,9 +99,10 @@ export default async function PortfolioPage() {
     );
   }
 
-  const [trades, watched] = await Promise.all([
+  const [trades, watched, alerts] = await Promise.all([
     orEmpty("trades", listTrades(user.id)),
     orEmpty("watchlist", listWatch(user.id)),
+    orEmpty("alerts", listAlerts(user.id)),
   ]);
   const held = positions.map((p) => p.symbol);
   const owned = [...new Set([...held, ...trades.map((t) => t.symbol)])];
@@ -215,6 +219,10 @@ export default async function PortfolioPage() {
         <TradeForm today={today} />
       </div>
 
+      <div className="mt-4">
+        <ImportStatement />
+      </div>
+
       <div className="mt-6">
         {positions.length ? (
           <div className="card table-scroll">
@@ -262,14 +270,18 @@ export default async function PortfolioPage() {
         <WatchlistCard rows={watchRows} />
       </div>
 
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <AlertsCard alerts={alerts} emails={(process.env.ALERT_EMAILS ?? "").trim().toLowerCase() === "on"} />
+        <UpcomingEvents items={upcoming.filter((item) => item.kind === "meeting")} />
+      </div>
+
       <div className="mt-6">
         <TradesCard trades={trades} />
       </div>
 
       {owned.length ? (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-6">
           <DividendsCard lines={dividendLines(payouts, positions, trades, today)} year={today.slice(0, 4)} />
-          <UpcomingEvents items={upcoming.filter((item) => item.kind === "meeting")} />
         </div>
       ) : null}
 

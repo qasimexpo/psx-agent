@@ -7,12 +7,16 @@ import { getSessionUser } from "@/lib/auth/server";
 import { money, pkr, signedMoney } from "@/lib/format";
 import { todayPkt } from "@/lib/marketHours";
 import {
+  MAX_ALERTS,
   MAX_HOLDINGS,
   MAX_PRICE,
   MAX_QUANTITY,
   MAX_WATCHLIST,
   addWatch,
+  countActiveAlerts,
   countHoldings,
+  createAlert,
+  deleteAlert,
   countWatch,
   holdsSymbol,
   recordBuy,
@@ -176,4 +180,50 @@ export async function watchFromStockPage(_prev: FormState, formData: FormData): 
   if (!symbol) return { error: "Unknown symbol." };
   if (!(await getSessionUser())) redirect(`/login?next=${encodeURIComponent(`/stock/${symbol}`)}`);
   return addWatchAction(_prev, formData);
+}
+
+/** Whether the pipeline emails fired alerts; set ALERT_EMAILS=on once SMTP is configured there. */
+function alertEmailsOn(): boolean {
+  return (process.env.ALERT_EMAILS ?? "").trim().toLowerCase() === "on";
+}
+
+/**
+ * Sets a price alert from a stock page. Like Watch, a signed-out visitor is
+ * sent to sign in first. The alert carries the account's email, which is
+ * where the pipeline sends it when it fires.
+ */
+export async function createAlertAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const symbol = readSymbol(formData);
+  if (!symbol) return { error: "Unknown symbol." };
+  const user = await getSessionUser();
+  if (!user) redirect(`/login?next=${encodeURIComponent(`/stock/${symbol}`)}`);
+
+  const direction = formData.get("direction") === "below" ? "below" : "above";
+  const target = readNumber(formData, "target", MAX_PRICE, false);
+  if (target === null) return { error: "Enter a target price above zero." };
+  try {
+    if ((await countActiveAlerts(user.id)) >= MAX_ALERTS) {
+      return { error: `You can have up to ${MAX_ALERTS} alerts waiting at once.` };
+    }
+    if (!(await createAlert(user.id, user.email, symbol, direction, target))) {
+      return { error: `${symbol} is not a PSX symbol we have prices for.` };
+    }
+  } catch (error) {
+    log("alert", error);
+    return { error: SAVE_FAILED };
+  }
+  revalidatePath("/portfolio");
+  return {
+    ok: `Alert set: ${symbol} ${direction} ${pkr(target)}. ${
+      alertEmailsOn() ? `We will email ${user.email} when it happens.` : "It will show on your portfolio when it happens."
+    }`,
+  };
+}
+
+export async function deleteAlertAction(formData: FormData): Promise<void> {
+  const user = await getSessionUser();
+  const id = Number(formData.get("id"));
+  if (!user || !Number.isInteger(id) || id <= 0) return;
+  await deleteAlert(user.id, id);
+  revalidatePath("/portfolio");
 }
