@@ -5,9 +5,10 @@ import { DATE_PATTERN } from "@/lib/briefs";
 import { getBriefByDate, listBriefs } from "@/lib/db";
 
 /** The day's morning brief, written before the open. */
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; a published brief does not change.
-export const revalidate = 3600;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export async function generateStaticParams() {
   const briefs = await listBriefs(40);

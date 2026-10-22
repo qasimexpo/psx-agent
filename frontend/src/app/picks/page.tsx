@@ -17,9 +17,10 @@ import { SITE_URL } from "@/lib/site";
  * page that links to all of them, and targets "halal stocks Pakistan" head-on
  * rather than leaving that query to the home page.
  */
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; picks publish once a day.
-export const revalidate = 1800;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "Shariah-compliant stocks in Pakistan, by sector",

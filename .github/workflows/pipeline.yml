@@ -21,7 +21,10 @@ on:
     # scheduled runs under load, worst at the top of the hour, and this repo
     # lost whole days of runs that way (23 Sept, 1 Oct 2026). The case map in
     # 'Resolve job' matches these strings exactly, so change both together.
-    - cron: "7,37 4-11 * * 1-5"   # market: quotes, movers, index
+    # Prices only in PSX trading hours, 9:30am-3:30pm PKT (UTC+5): 9:37am,
+    # then every 30 minutes to 3:37pm, which picks up the closing prices.
+    - cron: "37 4 * * 1-5"        # market: quotes, movers, index (9:37am PKT)
+    - cron: "7,37 5-10 * * 1-5"   # market: 10:07am-3:37pm PKT
     - cron: "3 3 * * *"           # events: dividends, meetings, news
     - cron: "47 3 * * 1-5"        # brief: morning edition
     - cron: "17 4 * * 1-5"        # picks: Top Shariah-compliant picks
@@ -83,7 +86,8 @@ jobs:
         run: |
           if [ -n "$SCHEDULE" ]; then
             case "$SCHEDULE" in
-              "7,37 4-11 * * 1-5") JOB=market;     SESSION=closing ;;
+              "37 4 * * 1-5")      JOB=market;     SESSION=closing ;;
+              "7,37 5-10 * * 1-5") JOB=market;     SESSION=closing ;;
               "3 3 * * *")         JOB=events;     SESSION=closing ;;
               "47 3 * * 1-5")      JOB=brief;      SESSION=morning ;;
               "17 4 * * 1-5")      JOB=picks;      SESSION=closing ;;
@@ -128,6 +132,8 @@ jobs:
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          # Lets the pipeline tell the site to rebuild pages after new data.
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
         run: |
           python -m pipeline.run "${{ steps.resolve.outputs.job }}" \
             --session "${{ steps.resolve.outputs.session }}"

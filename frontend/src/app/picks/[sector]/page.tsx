@@ -22,9 +22,10 @@ import { SITE_URL } from "@/lib/site";
  * One page per sector. These target the searches people actually type, such as
  * "halal cement stocks in Pakistan", and they keep the home page static.
  */
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; picks publish once a day.
-export const revalidate = 1800;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export function generateStaticParams() {
   return PICK_SECTORS.map((sector) => ({ sector: sector.slug }));

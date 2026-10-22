@@ -13,9 +13,10 @@ import { SITE_URL } from "@/lib/site";
  * reading. Refreshed on the same five minute timer as the home page, so it is
  * live through the session and settles into the day's record after the close.
  */
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; quotes arrive every 30 minutes at most.
-export const revalidate = 900;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "KSE-100 market map: today's PSX heat map by sector",

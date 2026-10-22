@@ -4,11 +4,10 @@ import StockDirectory from "@/components/stocks/StockDirectory";
 import { getLastPriceSync, listIndexableSymbols } from "@/lib/db";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
 
-// Fifteen minutes. Each regeneration is a large page counted against the
-// Hobby plan's ISR write allowance, which is already exceeded, so this stays
-// at its original interval. The sync bar shows the time of the prices this
-// cached render holds, so it never claims a fresher sync than it displays.
-export const revalidate = 900;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "PSX stock directory with Shariah status",

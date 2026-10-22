@@ -19,7 +19,7 @@ import json
 import sys
 from datetime import datetime
 
-from pipeline import db
+from pipeline import db, site
 from pipeline.config import PKT, STOCK_PAGE_BATCH, setup_logging
 
 logger = setup_logging("smartsarmaya.run")
@@ -113,6 +113,10 @@ JOBS = {
 }
 
 
+#: Jobs whose writes change what the site shows; after each, its pages are refreshed.
+WRITES_SITE_DATA = {"market", "technicals", "events", "picks", "scorecard", "brief", "stocks", "bootstrap"}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SmartSarmaya data pipeline")
     parser.add_argument("job", choices=sorted(JOBS))
@@ -141,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
 
     elapsed = (datetime.now(PKT) - started).total_seconds()
     logger.info("Job '%s' finished in %.1fs: %s", args.job, elapsed, json.dumps(result, default=str))
+    if args.job in WRITES_SITE_DATA:
+        site.revalidate()
     return 0
 
 
