@@ -1007,18 +1007,22 @@ export async function getEventsFor(symbols: string[]): Promise<Record<string, st
 /** Daily closes per symbol, oldest first, as kept by the technicals job. */
 export async function getPriceHistories(
   symbols: string[],
-): Promise<Record<string, { t: string; v: number }[]>> {
+): Promise<Record<string, { t: string; v: number; vol?: number }[]>> {
   const upper = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
   if (!upper.length) return {};
   const rows = await query<Row>`
     SELECT symbol, series FROM price_history WHERE symbol = ANY(${upper})
   `;
-  const out: Record<string, { t: string; v: number }[]> = {};
+  const out: Record<string, { t: string; v: number; vol?: number }[]> = {};
   for (const row of rows) {
     const raw = typeof row.series === "string" ? JSON.parse(row.series) : row.series;
     out[String(row.symbol)] = (Array.isArray(raw) ? raw : []).flatMap((item: unknown) =>
       Array.isArray(item) && typeof item[0] === "string" && Number.isFinite(Number(item[1]))
-        ? [{ t: item[0], v: Number(item[1]) }]
+        ? [
+            Number.isFinite(Number(item[2]))
+              ? { t: item[0], v: Number(item[1]), vol: Number(item[2]) }
+              : { t: item[0], v: Number(item[1]) },
+          ]
         : [],
     );
   }
