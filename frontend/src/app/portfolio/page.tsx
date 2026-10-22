@@ -12,6 +12,7 @@ import PriceSyncStatus from "@/components/portfolio/PriceSyncStatus";
 import TradeForm from "@/components/portfolio/TradeForm";
 import TradesCard from "@/components/portfolio/TradesCard";
 import UpcomingEvents from "@/components/portfolio/UpcomingEvents";
+import Tabs from "@/components/ui/Tabs";
 import WatchlistCard from "@/components/portfolio/WatchlistCard";
 import { Disclaimer, EmptyState, SectionHeading, StatTile } from "@/components/ui/Primitives";
 import { isAuthConfigured } from "@/lib/auth/config";
@@ -60,7 +61,14 @@ function orEmpty<T>(what: string, promise: Promise<T[]>): Promise<T[]> {
   });
 }
 
-export default async function PortfolioPage() {
+const TAB_IDS = ["overview", "holdings", "watch", "activity"] as const;
+
+export default async function PortfolioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
   if (!isAuthConfigured()) {
     return (
       <Shell>
@@ -194,96 +202,113 @@ export default async function PortfolioPage() {
         </>
       ) : null}
 
-      {valueSeries.length ? (
-        <div className="mt-6">
-          <PortfolioPerformance value={valueSeries} benchmark={benchmark} usesTrades={trades.length > 0} />
-        </div>
-      ) : null}
-
-      {positions.length ? (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <Donut
-            title="By stock"
-            centerLabel={positions.length === 1 ? "stock" : "stocks"}
-            slices={foldSlices(positions.map((p) => ({ label: p.symbol, value: p.value })))}
-          />
-          <Donut
-            title="By sector"
-            centerLabel={bySector.size === 1 ? "sector" : "sectors"}
-            slices={foldSlices([...bySector].map(([label, value]) => ({ label, value })))}
-          />
-        </div>
-      ) : null}
-
       <div className="mt-6">
-        <TradeForm today={today} />
-      </div>
-
-      <div className="mt-4">
-        <ImportStatement />
-      </div>
-
-      <div className="mt-6">
-        {positions.length ? (
-          <div className="card table-scroll">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2.5 text-left">Stock</th>
-                  <th className="px-3 py-2.5 text-left">3 months</th>
-                  <th className="px-3 py-2.5 text-right">Shares</th>
-                  <th className="px-3 py-2.5 text-right">Avg cost</th>
-                  <th className="px-3 py-2.5 text-right">Price · today</th>
-                  <th className="px-3 py-2.5 text-right">Value</th>
-                  <th className="px-3 py-2.5 text-right">Profit / loss</th>
-                  <th className="px-3 py-2.5">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((position) => {
-                  const trend = sliceRange(closes[position.symbol], "3M");
-                  return (
-                    <HoldingRow
-                      key={position.symbol}
-                      position={position}
-                      weight={totals.value > 0 ? (position.value / totals.value) * 100 : null}
-                      trend={trend}
-                      trendChange={changePct(trend)}
+        <Tabs
+          label="Portfolio sections"
+          initial={TAB_IDS.find((id) => id === tab) ?? (positions.length ? "overview" : "holdings")}
+          tabs={[
+            { id: "overview", label: "Overview" },
+            { id: "holdings", label: "Holdings", count: positions.length },
+            { id: "watch", label: "Watchlist & alerts", count: watched.length + alerts.filter((a) => !a.triggered_at).length },
+            { id: "activity", label: "Trades & income" },
+          ]}
+          panels={{
+            overview: (
+              <>
+                {valueSeries.length ? (
+                  <PortfolioPerformance value={valueSeries} benchmark={benchmark} usesTrades={trades.length > 0} />
+                ) : null}
+                {positions.length ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <Donut
+                      title="By stock"
+                      centerLabel={positions.length === 1 ? "stock" : "stocks"}
+                      slices={foldSlices(positions.map((p) => ({ label: p.symbol, value: p.value })))}
                     />
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            icon={<BriefcaseBusiness className="h-8 w-8" aria-hidden />}
-            title="No holdings yet"
-            description={`Record a buy above to see its value, profit and loss and Shariah status. Up to ${MAX_HOLDINGS} stocks.`}
-          />
-        )}
+                    <Donut
+                      title="By sector"
+                      centerLabel={bySector.size === 1 ? "sector" : "sectors"}
+                      slices={foldSlices([...bySector].map(([label, value]) => ({ label, value })))}
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<BriefcaseBusiness className="h-8 w-8" aria-hidden />}
+                    title="Your overview fills in once you hold a stock"
+                    description="Open the Holdings tab to record a buy or import a broker statement."
+                  />
+                )}
+              </>
+            ),
+            holdings: (
+              <>
+                {positions.length ? (
+                  <div className="card table-scroll">
+                    <table className="w-full min-w-[900px] text-sm">
+                      <caption className="px-4 pt-3 text-left text-xs text-slate-500">
+                        Select a stock for its AI recommendation.
+                      </caption>
+                      <thead>
+                        <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          <th className="px-3 py-2.5 text-left">Stock</th>
+                          <th className="px-3 py-2.5 text-left">3 months</th>
+                          <th className="px-3 py-2.5 text-right">Shares</th>
+                          <th className="px-3 py-2.5 text-right">Avg cost</th>
+                          <th className="px-3 py-2.5 text-right">Price · today</th>
+                          <th className="px-3 py-2.5 text-right">Value</th>
+                          <th className="px-3 py-2.5 text-right">Profit / loss</th>
+                          <th className="px-3 py-2.5">
+                            <span className="sr-only">Actions</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {positions.map((position) => {
+                          const trend = sliceRange(closes[position.symbol], "3M");
+                          return (
+                            <HoldingRow
+                              key={position.symbol}
+                              position={position}
+                              weight={totals.value > 0 ? (position.value / totals.value) * 100 : null}
+                              trend={trend}
+                              trendChange={changePct(trend)}
+                            />
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<BriefcaseBusiness className="h-8 w-8" aria-hidden />}
+                    title="No holdings yet"
+                    description={`Record a buy below, or import a broker statement, to see value, profit and loss and Shariah status. Up to ${MAX_HOLDINGS} stocks.`}
+                  />
+                )}
+                <TradeForm today={today} />
+                <ImportStatement />
+              </>
+            ),
+            watch: (
+              <>
+                <WatchlistCard rows={watchRows} />
+                <AlertsCard alerts={alerts} emails={(process.env.ALERT_EMAILS ?? "").trim().toLowerCase() === "on"} />
+              </>
+            ),
+            activity: (
+              <>
+                <TradesCard trades={trades} />
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {owned.length ? (
+                    <DividendsCard lines={dividendLines(payouts, positions, trades, today)} year={today.slice(0, 4)} />
+                  ) : null}
+                  <UpcomingEvents items={upcoming.filter((item) => item.kind === "meeting")} />
+                </div>
+              </>
+            ),
+          }}
+        />
       </div>
-
-      <div className="mt-6">
-        <WatchlistCard rows={watchRows} />
-      </div>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <AlertsCard alerts={alerts} emails={(process.env.ALERT_EMAILS ?? "").trim().toLowerCase() === "on"} />
-        <UpcomingEvents items={upcoming.filter((item) => item.kind === "meeting")} />
-      </div>
-
-      <div className="mt-6">
-        <TradesCard trades={trades} />
-      </div>
-
-      {owned.length ? (
-        <div className="mt-6">
-          <DividendsCard lines={dividendLines(payouts, positions, trades, today)} year={today.slice(0, 4)} />
-        </div>
-      ) : null}
 
       <Disclaimer className="mt-10" />
     </Shell>
