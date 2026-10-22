@@ -227,6 +227,14 @@ export default function PrivacyPolicyPage() {
                   </td>
                 </tr>
                 <tr className="border-t border-slate-100">
+                  <td className="px-3 py-2.5 font-semibold text-navy-900">Resend</td>
+                  <td className="px-3 py-2.5">Email delivery, for sign-in links and price alerts</td>
+                  <td className="px-3 py-2.5">
+                    Your email address and the email we send you: a sign-in link, or which
+                    stock crossed your alert price
+                  </td>
+                </tr>
+                <tr className="border-t border-slate-100">
                   <td className="px-3 py-2.5 font-semibold text-navy-900">Groq</td>
                   <td className="px-3 py-2.5">Primary AI model provider, Llama</td>
                   <td className="px-3 py-2.5">
