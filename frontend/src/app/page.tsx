@@ -35,9 +35,10 @@ import {
  * engines and to the AdSense reviewer. The page refreshes on a five minute
  * timer rather than on every request.
  */
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; quotes arrive every 30 minutes at most.
-export const revalidate = 900;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 // Sector filtering lives at /picks/[sector] rather than in a query parameter,
 // which keeps this page statically rendered and gives each sector a page search

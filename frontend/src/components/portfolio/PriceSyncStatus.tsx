@@ -25,8 +25,8 @@ function ago(fromMs: number, nowMs: number): string {
  * Refresh re-reads the latest prices from our database; it does not fetch
  * from the PSX. The pipeline does that every 30 minutes in trading hours, and
  * letting each visitor trigger it would hammer the exchange's portal, which
- * blocks bursts. The page also refreshes itself every `autoSeconds` while the
- * tab is visible, and once when the visitor comes back to it.
+ * blocks bursts. During trading hours the page also refreshes itself every
+ * `autoSeconds` while the tab is visible, and once when the visitor comes back.
  *
  * Anything that depends on the clock renders only after mount, so the server
  * and the browser never disagree about "12 min ago".
@@ -47,9 +47,10 @@ export default function PriceSyncStatus({
     const tick = () => setNow(Date.now());
     tick();
     const clock = window.setInterval(tick, 30_000);
-    // Outside the transition, so a background refresh does not spin the button.
+    // Only in trading hours: outside them no new prices arrive, so there is
+    // nothing to fetch. Outside the transition, so it does not spin the button.
     const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState === "visible" && inTradingHours(new Date())) router.refresh();
     };
     const auto = window.setInterval(refreshIfVisible, autoSeconds * 1000);
     document.addEventListener("visibilitychange", refreshIfVisible);
@@ -85,7 +86,7 @@ export default function PriceSyncStatus({
       dot = "bg-amber-500";
       note = "No sync for a while during trading hours, so prices may be delayed.";
     } else {
-      note = "Market closed. Showing the last prices from the exchange.";
+      note = "Market closed. Showing the last prices; updates resume at 9:30am PKT on the next trading day.";
     }
   }
 

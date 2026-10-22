@@ -9,9 +9,10 @@ import { EDITOR, SITE_URL } from "@/lib/site";
  * The public scorecard. Publishing how the picks actually performed, including
  * the losers, is the thing that separates this from every other tip site.
  */
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; the scorecard updates once a day.
-export const revalidate = 3600;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "Track record of our AI Shariah-compliant picks",

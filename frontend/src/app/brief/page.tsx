@@ -7,9 +7,10 @@ import NewsletterSignup from "@/components/tools/NewsletterSignup";
 import { Disclaimer, EmptyState, SectionHeading } from "@/components/ui/Primitives";
 import { briefPath } from "@/lib/briefs";
 
-// Each regeneration counts against the Hobby plan's ISR writes, which ran over the
-// allowance; briefs publish twice a day.
-export const revalidate = 1800;
+// Rebuilt when the pipeline writes new data (POST /api/revalidate), which only
+// happens around PSX trading hours, so nothing rebuilds overnight or at weekends.
+// The day-long interval is only a safety net for a missed refresh call.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: "Daily PSX market brief",
