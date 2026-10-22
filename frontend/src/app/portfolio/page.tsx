@@ -242,6 +242,8 @@ export default async function PortfolioPage({
             ),
             holdings: (
               <>
+                <TradeForm today={today} />
+                <ImportStatement />
                 {positions.length ? (
                   <div className="card table-scroll">
                     <table className="w-full min-w-[900px] text-sm">
@@ -282,11 +284,9 @@ export default async function PortfolioPage({
                   <EmptyState
                     icon={<BriefcaseBusiness className="h-8 w-8" aria-hidden />}
                     title="No holdings yet"
-                    description={`Record a buy below, or import a broker statement, to see value, profit and loss and Shariah status. Up to ${MAX_HOLDINGS} stocks.`}
+                    description={`Record a buy above, or import a broker statement, to see value, profit and loss and Shariah status. Up to ${MAX_HOLDINGS} stocks.`}
                   />
                 )}
-                <TradeForm today={today} />
-                <ImportStatement />
               </>
             ),
             watch: (
