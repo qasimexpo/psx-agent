@@ -47,7 +47,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await ensureProfile(user.id, defaultName(user));
+    const meta = user.user_metadata ?? {};
+    await ensureProfile(
+      user.id,
+      defaultName(user),
+      String(meta.given_name ?? "").trim(),
+      String(meta.family_name ?? "").trim(),
+    );
   } catch (error) {
     // The portfolio page works without the row; saving a name creates it later.
     console.error("[auth] ensureProfile failed:", error instanceof Error ? error.message : error);

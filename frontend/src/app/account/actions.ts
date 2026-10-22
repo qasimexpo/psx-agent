@@ -4,21 +4,45 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createSupabaseServerClient, deleteAuthUser, getSessionUser } from "@/lib/auth/server";
-import { deleteUserData, saveDisplayName } from "@/lib/portfolio";
+import { deleteUserData, saveProfile } from "@/lib/portfolio";
 
 export type AccountState = { error?: string; ok?: string };
 
-export async function saveNameAction(_prev: AccountState, formData: FormData): Promise<AccountState> {
+const NAME = /^[\p{L}\p{M} .'-]*$/u;
+
+function readName(formData: FormData, field: string): string | null {
+  const value = String(formData.get(field) ?? "").replace(/\s+/g, " ").trim();
+  return value.length <= 60 && NAME.test(value) ? value : null;
+}
+
+/** Keeps a leading + and the digits; 10 to 15 digits, or empty to remove it. */
+function readPhone(formData: FormData): string | null {
+  const raw = String(formData.get("phone") ?? "").trim();
+  if (!raw) return "";
+  if (!/^\+?[\d\s()-]+$/.test(raw)) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return null;
+  return `${raw.startsWith("+") ? "+" : ""}${digits}`;
+}
+
+export async function saveProfileAction(_prev: AccountState, formData: FormData): Promise<AccountState> {
   const user = await getSessionUser();
   if (!user) return { error: "Your session has ended. Sign in again to continue." };
 
-  const name = String(formData.get("display_name") ?? "").replace(/\s+/g, " ").trim();
-  if (name.length > 80) return { error: "Keep the name under 80 characters." };
+  const first = readName(formData, "first_name");
+  const last = readName(formData, "last_name");
+  const phone = readPhone(formData);
+  if (first === null || last === null) {
+    return { error: "Use letters, spaces, hyphens or apostrophes in names, up to 60 characters." };
+  }
+  if (phone === null) {
+    return { error: "Enter the phone number with 10 to 15 digits, for example +92 300 1234567." };
+  }
 
   try {
-    await saveDisplayName(user.id, name);
+    await saveProfile(user.id, { first_name: first, last_name: last, phone });
   } catch (error) {
-    console.error("[account] save name failed:", error instanceof Error ? error.message : error);
+    console.error("[account] save profile failed:", error instanceof Error ? error.message : error);
     return { error: "Something went wrong saving that. Please try again." };
   }
   revalidatePath("/account");

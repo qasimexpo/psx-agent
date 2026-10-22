@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { BellRing } from "lucide-react";
 
 import { createAlertAction, type FormState } from "@/app/portfolio/actions";
@@ -14,6 +14,10 @@ import { createAlertAction, type FormState } from "@/app/portfolio/actions";
 export default function PriceAlertForm({ symbol, price }: { symbol: string; price: number | null }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(createAlertAction, {});
   const suggested = price ? (Math.round(price * 1.05 * 100) / 100).toFixed(2) : "";
+  // Controlled, because React resets a form's uncontrolled fields after every
+  // action, including one that returns an error, which wiped what was typed.
+  const [direction, setDirection] = useState("above");
+  const [target, setTarget] = useState(suggested);
 
   return (
     <section className="card mt-4 p-5" aria-labelledby="alert-title">
@@ -28,7 +32,8 @@ export default function PriceAlertForm({ symbol, price }: { symbol: string; pric
           name="direction"
           aria-label="Direction"
           className="focus-ring rounded-lg border border-slate-300 bg-white px-2 py-1.5"
-          defaultValue="above"
+          value={direction}
+          onChange={(event) => setDirection(event.target.value)}
         >
           <option value="above">above</option>
           <option value="below">below</option>
@@ -42,7 +47,8 @@ export default function PriceAlertForm({ symbol, price }: { symbol: string; pric
             step="0.01"
             min="0.01"
             required
-            defaultValue={suggested}
+            value={target}
+            onChange={(event) => setTarget(event.target.value)}
             aria-label="Target price"
             className="focus-ring tabular w-28 rounded-lg border border-slate-300 px-2 py-1.5"
           />

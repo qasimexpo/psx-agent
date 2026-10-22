@@ -120,7 +120,8 @@ export default function PrivacyPolicyPage() {
                 Your account and saved portfolio, if you create one.
               </strong>{" "}
               Supabase, which runs our sign-in, holds your email address, how you signed in
-              (email link or Google) and when. Our database holds a display name; for each
+              (email link or Google) and when. Our database holds your first and last name and,
+              if you add one, a phone number, which we do not use to call or message you; for each
               stock you hold, the symbol, number of shares, average cost and when you last changed
               it; each buy or sell you record (date, shares and price); the stocks on your
               watchlist; and any price alerts you set, with the email address to tell. A sign-in

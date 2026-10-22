@@ -37,7 +37,11 @@ export default function HoldingRow({
   trend: PricePoint[];
   trendChange: number | null;
 }) {
+  // Controlled, because React resets a form's uncontrolled fields after every
+  // action, including one that returns an error, which wiped what was typed.
   const [editing, setEditing] = useState(false);
+  const [draftQuantity, setDraftQuantity] = useState(String(position.quantity));
+  const [draftPrice, setDraftPrice] = useState(position.avg_price.toFixed(2));
   const [insight, setInsight] = useState(false);
   const [state, formAction, pending] = useActionState(
     async (prev: FormState, formData: FormData) => {
@@ -107,7 +111,8 @@ export default function HoldingRow({
               step="1"
               min="1"
               required
-              defaultValue={position.quantity}
+              value={draftQuantity}
+              onChange={(event) => setDraftQuantity(event.target.value)}
               aria-label={`Shares of ${position.symbol}`}
               className={INPUT}
             />
@@ -120,7 +125,8 @@ export default function HoldingRow({
               step="0.01"
               min="0.01"
               required
-              defaultValue={position.avg_price.toFixed(2)}
+              value={draftPrice}
+              onChange={(event) => setDraftPrice(event.target.value)}
               aria-label={`Average cost of ${position.symbol}`}
               className={INPUT}
             />
@@ -180,7 +186,12 @@ export default function HoldingRow({
           <div key="view" className="flex items-center justify-end gap-1">
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={() => {
+                // Start from the saved values each time the editor opens.
+                setDraftQuantity(String(position.quantity));
+                setDraftPrice(position.avg_price.toFixed(2));
+                setEditing(true);
+              }}
               aria-label={`Edit ${position.symbol}`}
               className="focus-ring rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
             >

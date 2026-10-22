@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
-import { deleteAccountAction, saveNameAction, type AccountState } from "@/app/account/actions";
+import { deleteAccountAction, saveProfileAction, type AccountState } from "@/app/account/actions";
+import type { Profile } from "@/lib/portfolio";
 
 const INPUT = "focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
@@ -24,30 +25,63 @@ function Message({ state }: { state: AccountState }) {
   return null;
 }
 
-export function NameForm({ initial }: { initial: string }) {
-  const [state, formAction, pending] = useActionState(saveNameAction, {});
+const LABEL = "block text-sm font-semibold text-navy-900";
+
+/** Name and phone, with the sign-in email shown but not editable here. */
+export function ProfileForm({
+  profile,
+  email,
+}: {
+  profile: Pick<Profile, "first_name" | "last_name" | "phone">;
+  email: string;
+}) {
+  const [state, formAction, pending] = useActionState(saveProfileAction, {});
+  // Controlled, because React resets a form's uncontrolled fields after every
+  // action, including one that returns an error, which wiped what was typed.
+  const [first, setFirst] = useState(profile.first_name);
+  const [last, setLast] = useState(profile.last_name);
+  const [phone, setPhone] = useState(profile.phone);
   return (
-    <form action={formAction}>
-      <label htmlFor="display_name" className="block text-sm font-semibold text-navy-900">
-        Display name
-      </label>
-      <div className="mt-1.5 flex gap-2">
+    <form action={formAction} className="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label htmlFor="first_name" className={LABEL}>First name</label>
+        <input id="first_name" name="first_name" maxLength={60} autoComplete="given-name" value={first} onChange={(event) => setFirst(event.target.value)} className={`${INPUT} mt-1.5`} />
+      </div>
+      <div>
+        <label htmlFor="last_name" className={LABEL}>Last name</label>
+        <input id="last_name" name="last_name" maxLength={60} autoComplete="family-name" value={last} onChange={(event) => setLast(event.target.value)} className={`${INPUT} mt-1.5`} />
+      </div>
+      <div>
+        <label htmlFor="phone" className={LABEL}>
+          Phone <span className="font-normal text-slate-500">(optional)</span>
+        </label>
         <input
-          id="display_name"
-          name="display_name"
-          maxLength={80}
-          defaultValue={initial}
-          className={INPUT}
+          id="phone"
+          name="phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          placeholder="+92 300 1234567"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          className={`${INPUT} mt-1.5`}
         />
+      </div>
+      <div>
+        <label htmlFor="email" className={LABEL}>Email</label>
+        <input id="email" type="email" value={email} readOnly aria-describedby="email-note" className={`${INPUT} mt-1.5 bg-slate-50 text-slate-600`} />
+        <p id="email-note" className="mt-1 text-xs text-slate-500">This is the address you sign in with.</p>
+      </div>
+      <div className="flex items-center gap-3 sm:col-span-2">
         <button
           type="submit"
           disabled={pending}
-          className="focus-ring shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="focus-ring rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
         >
-          {pending ? "Saving…" : "Save"}
+          {pending ? "Saving…" : "Save profile"}
         </button>
+        <Message state={state} />
       </div>
-      <Message state={state} />
     </form>
   );
 }
