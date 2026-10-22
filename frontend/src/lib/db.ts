@@ -337,7 +337,7 @@ const maybeNum = (value: unknown): number | null => {
  * That form silently broke every /brief/<date> URL and the sitemap, so every
  * date leaving this module goes through here.
  */
-function toIsoDay(value: unknown): string {
+export function toIsoDay(value: unknown): string {
   if (!value) return "";
   if (value instanceof Date) {
     // Use the local date parts: the column is a calendar day, not an instant,

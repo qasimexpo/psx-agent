@@ -120,9 +120,10 @@ export default function PrivacyPolicyPage() {
                 Your account and saved portfolio, if you create one.
               </strong>{" "}
               Supabase, which runs our sign-in, holds your email address, how you signed in
-              (email link or Google) and when. Our database holds a display name and, for each
-              stock you save, the symbol, number of shares, average cost and when you last changed
-              it. A sign-in cookie keeps you signed in. We use this only to show you your own
+              (email link or Google) and when. Our database holds a display name; for each
+              stock you hold, the symbol, number of shares, average cost and when you last changed
+              it; each buy or sell you record (date, shares and price); and the stocks on your
+              watchlist. A sign-in cookie keeps you signed in. We use this only to show you your own
               portfolio. It is never sold, shared, shown to other visitors, sent to an AI provider
               or advertiser, or passed to Google Analytics. Deleting your account from the account
               page erases the sign-in, the profile and every holding immediately and permanently.

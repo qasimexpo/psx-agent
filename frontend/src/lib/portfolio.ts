@@ -1,6 +1,6 @@
 import "server-only";
 
-import { mutate } from "./db";
+import { mutate, toIsoDay } from "./db";
 
 /**
  * Profiles and holdings for signed-in users.
@@ -38,6 +38,8 @@ export type Position = {
   pl_pct: number | null;
   day_change: number | null;
   quote_at: string | null;
+  /** When the position was first saved, for dividends on positions with no trades. */
+  since: string | null;
 };
 
 export type PortfolioTotals = {
@@ -96,6 +98,8 @@ export async function saveDisplayName(userId: string, displayName: string): Prom
 /** Erases everything the site holds for a user. Used when they delete their account. */
 export async function deleteUserData(userId: string): Promise<void> {
   await mutate`DELETE FROM holdings WHERE user_id = ${userId}`;
+  await mutate`DELETE FROM trades WHERE user_id = ${userId}`;
+  await mutate`DELETE FROM watchlist WHERE user_id = ${userId}`;
   await mutate`DELETE FROM profiles WHERE user_id = ${userId}`;
 }
 
@@ -105,7 +109,7 @@ export async function deleteUserData(userId: string): Promise<void> {
 
 export async function listPositions(userId: string): Promise<Position[]> {
   const rows = await mutate<Row>`
-    SELECT h.symbol, h.quantity, h.avg_price,
+    SELECT h.symbol, h.quantity, h.avg_price, h.created_at,
            s.name, s.sector_name, s.is_kmi, s.current_price, s.change, s.change_pct, s.quote_at
     FROM holdings h
     LEFT JOIN stocks s ON s.symbol = h.symbol
@@ -138,6 +142,7 @@ export async function listPositions(userId: string): Promise<Position[]> {
       pl_pct: pl !== null && cost > 0 ? (pl / cost) * 100 : null,
       day_change: change === null ? null : quantity * change,
       quote_at: iso(row.quote_at),
+      since: iso(row.created_at),
     };
   });
 }
@@ -218,4 +223,188 @@ export async function updateHolding(
 
 export async function removeHolding(userId: string, symbol: string): Promise<void> {
   await mutate`DELETE FROM holdings WHERE user_id = ${userId} AND symbol = ${symbol}`;
+}
+
+// ---------------------------------------------------------------------------
+// trades
+// ---------------------------------------------------------------------------
+
+export type Trade = {
+  id: number;
+  symbol: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price: number;
+  trade_date: string;
+  realized_pl: number | null;
+};
+
+/** A buy: merges into the position like addHolding, then logs the trade. */
+export async function recordBuy(
+  userId: string,
+  symbol: string,
+  quantity: number,
+  price: number,
+  tradeDate: string,
+): Promise<boolean> {
+  if (!(await addHolding(userId, symbol, quantity, price))) return false;
+  await mutate`
+    INSERT INTO trades (user_id, symbol, side, quantity, price, trade_date, realized_pl, created_at)
+    VALUES (${userId}, ${symbol}, ${"buy"}, ${quantity}, ${price}, ${tradeDate}, NULL, NOW())
+  `;
+  return true;
+}
+
+export type SellOutcome =
+  | { ok: true; realized: number }
+  | { ok: false; held: number };
+
+/**
+ * A sell. The position is reduced in one conditional UPDATE, so two sells
+ * racing can never take it below zero. Average cost does not change on a
+ * sell; the profit realised is (sell price - average cost) x shares, stored
+ * on the trade. A position sold to zero is removed.
+ */
+export async function recordSell(
+  userId: string,
+  symbol: string,
+  quantity: number,
+  price: number,
+  tradeDate: string,
+): Promise<SellOutcome> {
+  const rows = await mutate<Row>`
+    UPDATE holdings SET quantity = quantity - ${quantity}, updated_at = NOW()
+    WHERE user_id = ${userId} AND symbol = ${symbol} AND quantity >= ${quantity}
+    RETURNING avg_price, quantity
+  `;
+  if (!rows.length) {
+    const held = await mutate<Row>`
+      SELECT quantity FROM holdings WHERE user_id = ${userId} AND symbol = ${symbol}
+    `;
+    return { ok: false, held: num(held[0]?.quantity) ?? 0 };
+  }
+  const realized = Math.round((price - (num(rows[0].avg_price) ?? 0)) * quantity * 100) / 100;
+  await mutate`
+    INSERT INTO trades (user_id, symbol, side, quantity, price, trade_date, realized_pl, created_at)
+    VALUES (${userId}, ${symbol}, ${"sell"}, ${quantity}, ${price}, ${tradeDate}, ${realized}, NOW())
+  `;
+  if ((num(rows[0].quantity) ?? 0) <= 0) {
+    await mutate`DELETE FROM holdings WHERE user_id = ${userId} AND symbol = ${symbol} AND quantity <= 0`;
+  }
+  return { ok: true, realized };
+}
+
+/** Every trade, oldest first: the account-value chart and dividends need them all. */
+export async function listTrades(userId: string): Promise<Trade[]> {
+  const rows = await mutate<Row>`
+    SELECT id, symbol, side, quantity, price, trade_date, realized_pl FROM trades
+    WHERE user_id = ${userId}
+    ORDER BY trade_date, id
+  `;
+  return rows.map((row) => ({
+    id: num(row.id) ?? 0,
+    symbol: String(row.symbol),
+    side: row.side === "sell" ? "sell" : "buy",
+    quantity: num(row.quantity) ?? 0,
+    price: num(row.price) ?? 0,
+    trade_date: toIsoDay(row.trade_date),
+    realized_pl: num(row.realized_pl),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// watchlist
+// ---------------------------------------------------------------------------
+
+export const MAX_WATCHLIST = 50;
+
+export type Watched = {
+  symbol: string;
+  name: string;
+  is_kmi: boolean;
+  price: number | null;
+  change_pct: number | null;
+  quote_at: string | null;
+  high_52w: number | null;
+  low_52w: number | null;
+};
+
+/** Follows a symbol. Like addHolding, an unknown symbol inserts nothing. */
+export async function addWatch(userId: string, symbol: string): Promise<boolean> {
+  const rows = await mutate<Row>`
+    INSERT INTO watchlist (user_id, symbol, created_at)
+    SELECT ${userId}::text, symbol, NOW() FROM stocks WHERE symbol = ${symbol}
+    ON CONFLICT (user_id, symbol) DO NOTHING
+    RETURNING symbol
+  `;
+  if (rows.length) return true;
+  // Already followed is fine; only an unknown symbol is an error.
+  const known = await mutate<Row>`SELECT symbol FROM stocks WHERE symbol = ${symbol}`;
+  return known.length > 0;
+}
+
+export async function removeWatch(userId: string, symbol: string): Promise<void> {
+  await mutate`DELETE FROM watchlist WHERE user_id = ${userId} AND symbol = ${symbol}`;
+}
+
+export async function countWatch(userId: string): Promise<number> {
+  const rows = await mutate<Row>`SELECT count(*) AS total FROM watchlist WHERE user_id = ${userId}`;
+  return num(rows[0]?.total) ?? 0;
+}
+
+export async function listWatch(userId: string): Promise<Watched[]> {
+  const rows = await mutate<Row>`
+    SELECT w.symbol, s.name, s.is_kmi, s.current_price, s.change_pct, s.quote_at,
+           s.high_52w, s.low_52w
+    FROM watchlist w
+    LEFT JOIN stocks s ON s.symbol = w.symbol
+    WHERE w.user_id = ${userId}
+    ORDER BY w.created_at
+  `;
+  return rows.map((row) => {
+    const quoted = num(row.current_price);
+    return {
+      symbol: String(row.symbol),
+      name: String(row.name ?? ""),
+      is_kmi: Boolean(row.is_kmi),
+      price: quoted !== null && quoted > 0 ? quoted : null,
+      change_pct: num(row.change_pct),
+      quote_at: iso(row.quote_at),
+      high_52w: num(row.high_52w),
+      low_52w: num(row.low_52w),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// dividends
+// ---------------------------------------------------------------------------
+
+export type PayoutRecord = { symbol: string; payout: string; book_closure_from: string };
+
+/** Payouts for these symbols: those already archived and those announced ahead. */
+export async function listPayoutsFor(symbols: string[]): Promise<PayoutRecord[]> {
+  if (!symbols.length) return [];
+  const past = await mutate<Row>`
+    SELECT symbol, payout, book_closure_from FROM payout_history WHERE symbol = ANY(${symbols})
+  `;
+  const ahead = await mutate<Row>`
+    SELECT symbol, payout, book_closure_from FROM payouts
+    WHERE symbol = ANY(${symbols}) AND book_closure_from IS NOT NULL
+  `;
+  const seen = new Set<string>();
+  const out: PayoutRecord[] = [];
+  for (const row of [...past, ...ahead]) {
+    const record = {
+      symbol: String(row.symbol),
+      payout: String(row.payout ?? ""),
+      book_closure_from: toIsoDay(row.book_closure_from),
+    };
+    const key = `${record.symbol}|${record.payout}|${record.book_closure_from}`;
+    if (record.book_closure_from && !seen.has(key)) {
+      seen.add(key);
+      out.push(record);
+    }
+  }
+  return out.sort((a, b) => a.book_closure_from.localeCompare(b.book_closure_from));
 }

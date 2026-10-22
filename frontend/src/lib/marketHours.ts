@@ -13,6 +13,11 @@ const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
 const OPEN_MINUTE = 9 * 60 + 30;
 const CLOSE_MINUTE = 15 * 60 + 30;
 
+/** Today's date in Pakistan, YYYY-MM-DD: the exchange's calendar day. */
+export function todayPkt(now: number = Date.now()): string {
+  return new Date(now + PKT_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 /** A sync this recent, during trading hours, counts as live. */
 export const LIVE_WINDOW_MINUTES = 45;
 

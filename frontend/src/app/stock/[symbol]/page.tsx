@@ -18,6 +18,7 @@ import {
   relativeTime,
 } from "@/lib/format";
 import StockPriceChart from "@/components/stocks/StockPriceChart";
+import WatchButton from "@/components/stocks/WatchButton";
 import { Disclaimer, RangeBar } from "@/components/ui/Primitives";
 import GoogleAd from "@/components/GoogleAd";
 import { AD_SLOT_ARTICLE } from "@/lib/adsense";
@@ -235,6 +236,9 @@ export default async function StockPage({
               <p className="mt-0.5 text-xs text-slate-500">
                 Updated {relativeTime(stock.quote_at)}
               </p>
+              <div className="mt-3">
+                <WatchButton symbol={clean} />
+              </div>
             </div>
           </div>
 

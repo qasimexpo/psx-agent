@@ -3,11 +3,14 @@ import Link from "next/link";
 import { BriefcaseBusiness, LockKeyhole, Settings } from "lucide-react";
 
 import Donut from "@/components/charts/Donut";
-import AddHoldingForm from "@/components/portfolio/AddHoldingForm";
+import DividendsCard from "@/components/portfolio/DividendsCard";
 import HoldingRow from "@/components/portfolio/HoldingRow";
 import PortfolioPerformance from "@/components/portfolio/PortfolioPerformance";
 import PriceSyncStatus from "@/components/portfolio/PriceSyncStatus";
+import TradeForm from "@/components/portfolio/TradeForm";
+import TradesCard from "@/components/portfolio/TradesCard";
 import UpcomingEvents from "@/components/portfolio/UpcomingEvents";
+import WatchlistCard from "@/components/portfolio/WatchlistCard";
 import { Disclaimer, EmptyState, SectionHeading, StatTile } from "@/components/ui/Primitives";
 import { isAuthConfigured } from "@/lib/auth/config";
 import { requireUser } from "@/lib/auth/server";
@@ -20,8 +23,19 @@ import {
   type PricePoint,
 } from "@/lib/charts";
 import { getIndexHistory, getLastPriceSync, getPriceHistories, getUpcomingFor } from "@/lib/db";
+import { dividendLines } from "@/lib/dividends";
+import { todayPkt } from "@/lib/marketHours";
 import { percent, pkr, signedMoney } from "@/lib/format";
-import { MAX_HOLDINGS, getProfile, listPositions, summarise, type Position } from "@/lib/portfolio";
+import {
+  MAX_HOLDINGS,
+  getProfile,
+  listPayoutsFor,
+  listPositions,
+  listTrades,
+  listWatch,
+  summarise,
+  type Position,
+} from "@/lib/portfolio";
 
 export const metadata: Metadata = {
   title: "My portfolio",
@@ -33,6 +47,14 @@ export const dynamic = "force-dynamic";
 function tone(value: number | null): "default" | "positive" | "negative" {
   if (!value) return "default";
   return value > 0 ? "positive" : "negative";
+}
+
+/** A secondary read: on failure its section shows empty and the rest of the page still loads. */
+function orEmpty<T>(what: string, promise: Promise<T[]>): Promise<T[]> {
+  return promise.catch((error) => {
+    console.error(`[portfolio] ${what} failed:`, error instanceof Error ? error.message : error);
+    return [];
+  });
 }
 
 export default async function PortfolioPage() {
@@ -74,22 +96,36 @@ export default async function PortfolioPage() {
     );
   }
 
+  const [trades, watched] = await Promise.all([
+    orEmpty("trades", listTrades(user.id)),
+    orEmpty("watchlist", listWatch(user.id)),
+  ]);
+  const held = positions.map((p) => p.symbol);
+  const owned = [...new Set([...held, ...trades.map((t) => t.symbol)])];
+  const [histories, kse100, upcoming, payouts] = await Promise.all([
+    getPriceHistories([...owned, ...watched.map((w) => w.symbol)]),
+    getIndexHistory("KSE100", 260),
+    getUpcomingFor(held),
+    orEmpty("payouts", listPayoutsFor(owned)),
+  ]);
+
   const totals = summarise(positions);
   const unpriced = positions.filter((p) => p.price === null).length;
+  const realized = trades.reduce((sum, t) => sum + (t.realized_pl ?? 0), 0);
+  const today = todayPkt();
 
-  // These reads degrade to empty on failure, so a chart can go blank but the
-  // holdings above always render.
-  const symbols = positions.map((p) => p.symbol);
-  const [histories, kse100, upcoming] = await Promise.all([
-    getPriceHistories(symbols),
-    getIndexHistory("KSE100", 260),
-    getUpcomingFor(symbols),
-  ]);
   const closes: Record<string, PricePoint[]> = Object.fromEntries(
-    positions.map((p) => [p.symbol, withLatest(histories[p.symbol] ?? [], p.price, p.quote_at)]),
+    owned.map((symbol) => {
+      const position = positions.find((p) => p.symbol === symbol);
+      return [symbol, withLatest(histories[symbol] ?? [], position?.price ?? null, position?.quote_at ?? null)];
+    }),
   );
-  const valueSeries = holdingsValueSeries(positions, closes);
+  const valueSeries = holdingsValueSeries(positions, closes, trades);
   const benchmark = kse100.map(({ day, value }) => ({ t: day, v: value }));
+  const watchRows = watched.map((w) => {
+    const trend = sliceRange(withLatest(histories[w.symbol] ?? [], w.price, w.quote_at), "3M");
+    return { ...w, trend, trendChange: changePct(trend) };
+  });
 
   const bySector = new Map<string, number>();
   for (const p of positions) {
@@ -124,9 +160,13 @@ export default async function PortfolioPage() {
           <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
             <StatTile label="Market value" value={pkr(totals.value)} hint={`Cost ${pkr(totals.cost)}`} />
             <StatTile
-              label="Total profit / loss"
+              label="Open profit / loss"
               value={signedMoney(totals.pl)}
-              hint={percent(totals.pl_pct)}
+              hint={
+                trades.length
+                  ? `${percent(totals.pl_pct)} · realised ${signedMoney(realized)}`
+                  : percent(totals.pl_pct)
+              }
               tone={tone(totals.pl)}
             />
             <StatTile
@@ -147,28 +187,32 @@ export default async function PortfolioPage() {
               exchange and {unpriced > 1 ? "are" : "is"} valued at cost.
             </p>
           ) : null}
-
-          <div className="mt-6">
-            <PortfolioPerformance value={valueSeries} benchmark={benchmark} />
-          </div>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <Donut
-              title="By stock"
-              centerLabel={positions.length === 1 ? "stock" : "stocks"}
-              slices={foldSlices(positions.map((p) => ({ label: p.symbol, value: p.value })))}
-            />
-            <Donut
-              title="By sector"
-              centerLabel={bySector.size === 1 ? "sector" : "sectors"}
-              slices={foldSlices([...bySector].map(([label, value]) => ({ label, value })))}
-            />
-          </div>
         </>
       ) : null}
 
+      {valueSeries.length ? (
+        <div className="mt-6">
+          <PortfolioPerformance value={valueSeries} benchmark={benchmark} usesTrades={trades.length > 0} />
+        </div>
+      ) : null}
+
+      {positions.length ? (
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <Donut
+            title="By stock"
+            centerLabel={positions.length === 1 ? "stock" : "stocks"}
+            slices={foldSlices(positions.map((p) => ({ label: p.symbol, value: p.value })))}
+          />
+          <Donut
+            title="By sector"
+            centerLabel={bySector.size === 1 ? "sector" : "sectors"}
+            slices={foldSlices([...bySector].map(([label, value]) => ({ label, value })))}
+          />
+        </div>
+      ) : null}
+
       <div className="mt-6">
-        <AddHoldingForm />
+        <TradeForm today={today} />
       </div>
 
       <div className="mt-6">
@@ -209,14 +253,23 @@ export default async function PortfolioPage() {
           <EmptyState
             icon={<BriefcaseBusiness className="h-8 w-8" aria-hidden />}
             title="No holdings yet"
-            description={`Add the shares you own above to see their value, profit and loss and Shariah status. Up to ${MAX_HOLDINGS} stocks.`}
+            description={`Record a buy above to see its value, profit and loss and Shariah status. Up to ${MAX_HOLDINGS} stocks.`}
           />
         )}
       </div>
 
-      {positions.length ? (
-        <div className="mt-6">
-          <UpcomingEvents items={upcoming} />
+      <div className="mt-6">
+        <WatchlistCard rows={watchRows} />
+      </div>
+
+      <div className="mt-6">
+        <TradesCard trades={trades} />
+      </div>
+
+      {owned.length ? (
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <DividendsCard lines={dividendLines(payouts, positions, trades, today)} year={today.slice(0, 4)} />
+          <UpcomingEvents items={upcoming.filter((item) => item.kind === "meeting")} />
         </div>
       ) : null}
 

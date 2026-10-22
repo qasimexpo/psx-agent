@@ -62,3 +62,17 @@ def test_technicals_job_stores_history_only_for_symbols_with_enough_data(empty_d
     assert result["updated"] == 1
     assert set(stored()) == {"OGDC"}
     assert len(stored()["OGDC"]) == 60
+
+
+def test_payout_archive_keeps_each_payout_once_and_skips_undated(empty_db):
+    rows = [
+        {"symbol": "OGDC", "payout": "25%(F) (D)", "announced_on": date(2026, 9, 1),
+         "book_closure_from": date(2026, 9, 20), "book_closure_to": date(2026, 9, 22)},
+        {"symbol": "OGDC", "payout": "30%(i) (D)", "announced_on": None,
+         "book_closure_from": None, "book_closure_to": None},
+    ]
+    db.archive_payouts(rows)
+    db.archive_payouts(rows)
+    with db.session_scope() as session:
+        kept = session.execute(select(db.PayoutHistory.payout)).scalars().all()
+    assert kept == ["25%(F) (D)"]

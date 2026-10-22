@@ -58,37 +58,70 @@ export function withLatest(
   return points;
 }
 
+export type TradeStep = { symbol: string; side: "buy" | "sell"; quantity: number; trade_date: string };
+
 /**
- * What the shares held today were worth on each past day. It is not the
- * account's history, which would need every past trade; it answers "how have
- * the stocks I own moved". A symbol with no history counts at a constant value
- * so the total still ends at today's market value.
+ * The portfolio's value on each past day.
+ *
+ * Share counts follow the recorded trades: a buy counts from its trade date,
+ * a sell stops counting then. Shares held with no trades behind them (saved
+ * before trades existed, or entered as a position) count throughout, so with
+ * no trades at all this is simply what today's shares were worth each day.
+ * Cash is not tracked, so a sale lowers the line. A symbol with no price
+ * history counts at today's value throughout.
  */
 export function holdingsValueSeries(
   holdings: { symbol: string; quantity: number; value: number }[],
   histories: Record<string, PricePoint[]>,
+  trades: TradeStep[] = [],
 ): PricePoint[] {
-  const tracked = holdings.filter((h) => (histories[h.symbol]?.length ?? 0) > 0);
+  const current = new Map(holdings.map((h) => [h.symbol, h.quantity]));
+  const symbols = [...new Set([...holdings.map((h) => h.symbol), ...trades.map((t) => t.symbol)])];
+  const tracked = symbols.filter((symbol) => (histories[symbol]?.length ?? 0) > 0);
   const constant = holdings
-    .filter((h) => !tracked.includes(h))
+    .filter((h) => !tracked.includes(h.symbol))
     .reduce((sum, h) => sum + h.value, 0);
   if (!tracked.length) return [];
 
-  const days = [...new Set(tracked.flatMap((h) => histories[h.symbol].map((p) => p.t)))].sort();
-  const cursor = new Map<string, number>(tracked.map((h) => [h.symbol, 0]));
+  const steps = new Map(
+    tracked.map((symbol) => {
+      const own = trades
+        .filter((t) => t.symbol === symbol)
+        .map((t) => ({ day: t.trade_date, delta: t.side === "buy" ? t.quantity : -t.quantity }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+      const net = own.reduce((sum, step) => sum + step.delta, 0);
+      return [symbol, { opening: Math.max(0, (current.get(symbol) ?? 0) - net), own }];
+    }),
+  );
 
-  return days.map((day) => {
+  const days = [...new Set(tracked.flatMap((symbol) => histories[symbol].map((p) => p.t)))].sort();
+  const priceAt = new Map<string, number>(tracked.map((symbol) => [symbol, 0]));
+  const stepAt = new Map<string, number>(tracked.map((symbol) => [symbol, 0]));
+  const shares = new Map<string, number>(tracked.map((symbol) => [symbol, steps.get(symbol)!.opening]));
+
+  const series = days.map((day) => {
     let total = constant;
-    for (const holding of tracked) {
-      const series = histories[holding.symbol];
-      let index = cursor.get(holding.symbol) ?? 0;
-      while (index + 1 < series.length && series[index + 1].t <= day) index += 1;
-      cursor.set(holding.symbol, index);
+    for (const symbol of tracked) {
+      const closes = histories[symbol];
+      let p = priceAt.get(symbol) ?? 0;
+      while (p + 1 < closes.length && closes[p + 1].t <= day) p += 1;
+      priceAt.set(symbol, p);
+
+      const { own } = steps.get(symbol)!;
+      let s = stepAt.get(symbol) ?? 0;
+      let held = shares.get(symbol) ?? 0;
+      while (s < own.length && own[s].day <= day) held += own[s++].delta;
+      stepAt.set(symbol, s);
+      shares.set(symbol, held);
+
       // Before a symbol's first close, its first close stands in.
-      total += holding.quantity * series[index].v;
+      total += Math.max(0, held) * closes[p].v;
     }
     return { t: day, v: total };
   });
+  // Days before anything was held carry no information.
+  const first = series.findIndex((point) => point.v > 0);
+  return first < 0 ? [] : series.slice(first);
 }
 
 export type Slice = { label: string; value: number; other?: boolean };

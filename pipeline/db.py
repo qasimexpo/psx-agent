@@ -16,6 +16,7 @@ movers           top gainers / losers / most active, replaced each run
 sector_stats     advance-decline and turnover per sector
 corporate_events AGM / EOGM / board meetings
 payouts          dividend announcements and book closure windows
+payout_history   every payout seen this year, kept for dividend income
 news_items       Pakistan and global market headlines, replaced each run
 news_archive     every headline ever seen, keyed by link, never deleted
 top_picks        AI picks keyed by (timeframe, sector, pick_date) so history
@@ -26,6 +27,8 @@ stock_notes      AI written commentary for each stock detail page
 subscribers      newsletter signups (written by the site)
 profiles         one row per signed-in user (written by the site)
 holdings         each user's positions, one per symbol (written by the site)
+trades           each user's recorded buys and sells (written by the site)
+watchlist        symbols a user follows without holding them (written by the site)
 """
 
 from __future__ import annotations
@@ -372,6 +375,61 @@ class Holding(Base):
     avg_price: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class Trade(Base):
+    """A buy or sell a user recorded. Holdings stay the running position.
+
+    A sell stores the profit it realised against the average cost at that
+    moment, so realised profit never changes when later trades move the
+    average. A position entered before trades existed has no trades, and
+    counts as held from before the first trade.
+    """
+
+    __tablename__ = "trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    symbol: Mapped[str] = mapped_column(String(20))
+    side: Mapped[str] = mapped_column(String(4))  # buy|sell
+    quantity: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    trade_date: Mapped[date] = mapped_column(Date)
+    realized_pl: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class WatchlistItem(Base):
+    """A symbol a user follows without holding it."""
+
+    __tablename__ = "watchlist"
+    __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_watchlist_user_symbol"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    symbol: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class PayoutHistory(Base):
+    """Every payout the exchange listed, kept after its book closure passes.
+
+    `payouts` only holds the upcoming window, so without this there is no
+    record of what a held stock paid. Rows are only ever added.
+    """
+
+    __tablename__ = "payout_history"
+    __table_args__ = (
+        UniqueConstraint("symbol", "payout", "book_closure_from", name="uq_payout_history"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    payout: Mapped[str] = mapped_column(String(128), default="")
+    announced_on: Mapped[date | None] = mapped_column(Date)
+    book_closure_from: Mapped[date] = mapped_column(Date, index=True)
+    book_closure_to: Mapped[date | None] = mapped_column(Date)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
 # --------------------------------------------------------------------------
@@ -850,6 +908,30 @@ def archive_news(rows: list[dict[str, Any]]) -> int:
         ]
         # Ignore rather than insert: two overlapping jobs may archive the same link.
         _insert_ignore(session, NewsArchive, fresh, ["link"])
+    return len(fresh)
+
+
+def archive_payouts(rows: list[dict[str, Any]]) -> int:
+    """Keep payouts not already archived; returns how many were offered.
+
+    Rows without a book closure date are skipped: they cannot be placed in time.
+    """
+    fresh = [
+        {
+            "symbol": row["symbol"],
+            "payout": row["payout"],
+            "announced_on": row.get("announced_on"),
+            "book_closure_from": row["book_closure_from"],
+            "book_closure_to": row.get("book_closure_to"),
+            "first_seen_at": _utc_now(),
+        }
+        for row in rows
+        if row.get("book_closure_from")
+    ]
+    if not fresh:
+        return 0
+    with session_scope() as session:
+        _insert_ignore(session, PayoutHistory, fresh, ["symbol", "payout", "book_closure_from"])
     return len(fresh)
 
 

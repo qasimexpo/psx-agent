@@ -23,7 +23,7 @@ DB_TS = ROOT / "frontend" / "src" / "lib" / "db.ts"
 PORTFOLIO_TS = ROOT / "frontend" / "src" / "lib" / "portfolio.ts"
 
 # Tables the site writes itself, from a visitor's action.
-SITE_WRITTEN = {"subscribers", "profiles", "holdings"}
+SITE_WRITTEN = {"subscribers", "profiles", "holdings", "trades", "watchlist"}
 
 # Identifiers that appear in the SQL but are not columns.
 SQL_NOISE = {
@@ -46,6 +46,7 @@ def _table_columns() -> dict[str, set[str]]:
             db.Stock, db.MarketIndex, db.Mover, db.SectorStat, db.CorporateEvent,
             db.Payout, db.NewsItem, db.TopPick, db.PickTrack, db.DailyBrief,
             db.StockNote, db.Subscriber, db.Profile, db.Holding, db.PriceHistory,
+            db.Trade, db.WatchlistItem, db.PayoutHistory,
         )
     }
 
@@ -219,7 +220,7 @@ def test_pipeline_writes_every_table_the_site_reads(blocks: list[str]) -> None:
     written = {
         "stocks", "market_index", "movers", "sector_stats", "corporate_events",
         "payouts", "news_items", "top_picks", "pick_track", "daily_briefs",
-        "stock_notes", "price_history",
+        "stock_notes", "price_history", "payout_history",
     }
     orphans = read - written - SITE_WRITTEN
     assert not orphans, f"Site reads tables the pipeline never writes: {sorted(orphans)}"
